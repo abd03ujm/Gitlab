@@ -2,13 +2,10 @@ stages:
   - tag
   - build_push
   
-
 variables:
   IMAGE_NAME: registry.pgr.com/my-application # Replace with your registry/image name
   VERSION_FILE: VERSION # Version file location
   NODE_VERSION: v18.0 # Node.js version for tagging
-
-
 
 tag:
   stage: tag
@@ -58,8 +55,9 @@ build_push:
     - echo "Pushing Docker image to registry..."
     - IMAGE_TAG=$(cat image_tag.txt)
     - echo $IMAGE_TAG
-    # - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
-    # - docker push $IMAGE_NAME:$IMAGE_TAG
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - docker build -t $IMAGE_NAME:$IMAGE_TAG .
+    - docker push $IMAGE_NAME:$IMAGE_TAG
   only:
     - branches
   tags:

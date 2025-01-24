@@ -1,26 +1,25 @@
 stages:
   - build
+  - push
 
 variables:
   IMAGE_NAME: registry.example.com/your-project/node-alpine
 
-build_images:
+build_and_push:
   stage: build
   image: docker:stable
   services:
     - docker:dind
-  # variables:
-  #   DOCKER_TLS_CERTDIR: "/certs"
-  parallel: 
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  parallel:
     matrix:
-      - NODE_VERSION: ["20", "18", "22"]
+      - NODE_DIR: ["node-17/alpine-3.18", "node-18/alpine-3.18", "node-20/alpine-3.18"]
   script:
-    - echo $NODE_VERSION
-
-    - echo docker build --build-arg NODE_VERSION=$NODE_VERSION -t $IMAGE_NAME:$NODE_VERSION -f Dockerfile
-    - echo push $IMAGE_NAME:$NODE_VERSION
+    - NODE_VERSION=$(echo $NODE_DIR | cut -d'-' -f2 | cut -d'/' -f1)
+    - echo docker build  -t $IMAGE_NAME:$NODE_VERSION -f $NODE_DIR/Dockerfile .
+    - echo docker push $IMAGE_NAME:$NODE_VERSION
   only:
     - main
   tags:
     - k8s-runner
-##

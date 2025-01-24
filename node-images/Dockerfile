@@ -1,26 +1,17 @@
-stages:
-  - build
+ARG NODE_VERSION
+FROM node:${NODE_VERSION}-alpine
 
-variables:
-  IMAGE_NAME: registry.example.com/your-project/node-alpine
+# Optional: Add metadata
+LABEL maintainer="devops"
 
-build_images:
-  stage: build
-  image: docker:stable
-  services:
-    - docker:dind
-  # variables:
-  #   DOCKER_TLS_CERTDIR: "/certs"
-  parallel: 
-    matrix:
-      - NODE_VERSION: ["20", "18", "22"]
-  script:
-    - echo $NODE_VERSION
+# Optional: Set a working directory
+WORKDIR /app
 
-    - echo docker build --build-arg NODE_VERSION=$NODE_VERSION -t $IMAGE_NAME:$NODE_VERSION -f Dockerfile
-    - echo push $IMAGE_NAME:$NODE_VERSION
-  only:
-    - main
-  tags:
-    - k8s-runner
-##
+# Optional: Copy files and install dependencies (if needed)
+COPY package*.json ./
+RUN npm install
+
+# Optional: Copy application source
+COPY . .
+
+CMD ["node"]

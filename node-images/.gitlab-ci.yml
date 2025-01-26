@@ -1,6 +1,6 @@
 stages:
   - build
-
+  - push
 
 variables:
   IMAGE_NAME: registry.example.com/your-project/node-alpine
@@ -14,11 +14,15 @@ build_and_push:
     DOCKER_TLS_CERTDIR: "/certs"
   parallel:
     matrix:
-      - NODE_DIR: ["node-17/alpine-3.18", "node-18/alpine-3.18", "node-20/alpine-3.18"]
+      - NODE_DIR: ["17/alpine-3.18", "18/alpine-3.19", "20/alpine-3.20"]
   script:
-    - NODE_VERSION=$(echo $NODE_DIR | cut -d'-' -f2 | cut -d'/' -f1)
-    - echo docker build  -t $IMAGE_NAME:$NODE_VERSION -f $NODE_DIR/Dockerfile .
-    - echo docker push $IMAGE_NAME:$NODE_VERSION
+    - NODE_VERSION=$(echo $NODE_DIR | cut -d'/' -f1) # Extract node version (17, 18, 20)
+    - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'-' -f2) # Extract alpine version (3.18, 3.19, 3.20)
+    - FINAL_IMAGE="node-${NODE_VERSION}-alpine-${ALPINE_VERSION}" # Construct the final tag
+    - echo Building image - "$FINAL_IMAGE"
+    - echo docker build -t "$FINAL_IMAGE" -f "$NODE_DIR/Dockerfile" .
+    - echo Pushing image -  "$FINAL_IMAGE"
+    - echo docker push "$FINAL_IMAGE"
   only:
     - main
   tags:

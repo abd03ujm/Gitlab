@@ -14,11 +14,11 @@ build_and_push:
     DOCKER_TLS_CERTDIR: "/certs"
   parallel:
     matrix:
-      - NODE_DIR: ["17/alpine-3.18", "18/alpine-3.19", "20/alpine-3.20"]
+      - NODE_DIR: ["17/alpine-3.18", "18/alpine-3.18", "20/alpine-3.18"]
   script:
     - NODE_VERSION=$(grep -i "ENV NODE_VERSION" $NODE_DIR/Dockerfile | cut -d '=' -f2 | tr -d '[:space:]') # Extract node version (17, 18, 20)
     - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'-' -f2) # Extract alpine version (3.18, 3.19, 3.20)
-    - FINAL_IMAGE="node-${NODE_VERSION}-alpine-${ALPINE_VERSION}" # Construct the final tag
+    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-alpine-${ALPINE_VERSION}" # Construct the final tag
     - echo Building image - "$FINAL_IMAGE"
     - echo docker build -t "$FINAL_IMAGE" -f "$NODE_DIR/Dockerfile" .
     - echo Pushing image -  "$FINAL_IMAGE"

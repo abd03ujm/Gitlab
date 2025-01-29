@@ -1,0 +1,21 @@
+gitlabUrl: "http://192.168.1.120"
+runnerRegistrationToken: "glrt-AH5vTUbj5PX7aH9giXtj"
+serviceAccountName: "gitlab-runner-sa"
+runnerTags: "k8s-runner"
+rbac:
+  create: true
+runners:
+  config: |
+    [[runners]]
+      name = "k8s-runner"
+      url = "http://192.168.1.120/"
+      token = "glrt-Fsk9WJQ12LsbByB7nAg_"
+      executor = "kubernetes"
+      [runners.kubernetes]
+        image = "docker:19.03.12-dind"
+        privileged = true
+        [runners.kubernetes.volumes]
+          [[runners.kubernetes.volumes.host_path]]
+            name = "docker-socket"
+            mount_path = "/var/run/docker.sock"
+            host_path = "/var/run/docker.sock"

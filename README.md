@@ -1,7 +1,7 @@
 ```bash
-kubectl create secret docker-registry-jw regcred \
-  --docker-server=<your-registry> \
-  --docker-username=<your-username> \
-  --docker-password=<your-password> \
-  --docker-email=<your-email>
+kubectl create secret docker-registry my-docker-secret \
+  --docker-server=<REGISTRY_URL> \
+  --docker-username=<DOCKER_USERNAME> \
+  --docker-password=<DOCKER_PASSWORD> \
+  --docker-email=<DOCKER_EMAIL>
 ```

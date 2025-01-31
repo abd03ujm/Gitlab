@@ -1,0 +1,13 @@
+image: gcr.io/kaniko-project/executor:latest
+
+stages:
+  - build
+
+build-image:
+  stage: build
+  script:
+    # Create authentication file for Kaniko
+    - echo "{\"auths\":{\"$JFROG_REGISTRY\":{\"username\":\"$JFROG_USERNAME\",\"password\":\"$JFROG_PASSWORD\"}}}" > /kaniko/.docker/config.json
+
+    # Build and push the Docker image to JFrog Artifactory
+    - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile Dockerfile --destination $JFROG_REGISTRY/$IMAGE_NAME:$IMAGE_TAG

@@ -11,19 +11,11 @@ build:
     matrix:
       - NODE_DIR: ["17/alpine3.18", "18/alpine3.18", "20/alpine3.18"]
   script: 
-    - echo "${CI_REGISTRY_PASSWORD}" | docker login registry.pgr.com -u "${CI_REGISTRY_USER}" --password-stdin
-    # Extract NODE_VERSION from Dockerfile
-    - NODE_VERSION=$(awk -F'=' '/ENV NODE_VERSION/{print $2}' "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile" | tr -d '[:space:]')
-    
-    # Extract ALPINE_VERSION from directory structure
-    - ALPINE_VERSION=$(echo "${NODE_DIR}" | cut -d'/' -f2)
-    
-    # Construct final image tag
-    - FINAL_TAG="node-${NODE_VERSION}-${ALPINE_VERSION}"
-    - IMAGE_NAME="registry.pgr.com/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}"
-    - FINAL_IMAGE="${IMAGE_NAME}:${FINAL_TAG}"
-    
-    - echo "Building image - ${FINAL_IMAGE}"
+    - NODE_VERSION=$(awk -F'=' '/ENV NODE_VERSION/{print $2}' $NODE_DIR/Dockerfile | tr -d '[:space:]') # Using awk to extract NODE_VERSION # Extract node version (17, 18, 20)
+    - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) # Extract alpine version (3.18, 3.19, 3.20)
+    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" # Construct the final tag
+    - echo Building image - "$FINAL_IMAGE"
+    - echo docker build -t "$FINAL_IMAGE" -f "$NODE_DIR/Dockerfile"
     
     # Run Kaniko to build and push
     - /kaniko/executor

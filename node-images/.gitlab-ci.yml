@@ -1,7 +1,10 @@
 stages:
   - build
-
-
+variables:
+  ARTIFACTORY_USER: 2501440
+  ARTIFACTORY_URL: "docker.hyattdev.com"
+  IMAGE_NAME: docker.hyattdev.com/docker/alpine-node
+  
 build:
   stage: build
   image:
@@ -9,16 +12,43 @@ build:
     entrypoint: [""]
   parallel:
     matrix:
-      - NODE_DIR: ["17/alpine3.18", "18/alpine3.18", "20/alpine3.18"]
+      - NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
+  before_script:
+    - echo "{\"auths\":{\"${ARTIFACTORY_URL}\":{\"username\":\"${ARTIFACTORY_USER}\",\"password\":\"${ARTIFACTORY_PASSWORD}\"}}}" > /kaniko/.docker/config.json
+
   script: 
-    - NODE_VERSION=$(awk -F'=' '/ENV NODE_VERSION/{print $2}' $NODE_DIR/Dockerfile | tr -d '[:space:]') # Using awk to extract NODE_VERSION # Extract node version (17, 18, 20)
+    - echo "CI_PROJECT_DIR - ${CI_PROJECT_DIR}"
+    - echo "NODE_DIR - ${NODE_DIR}"
+    - echo "Checking Dockerfile Path - ${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
+    - ls -al "${CI_PROJECT_DIR}/${NODE_DIR}"
+    # - echo "${ARTIFACTORY_PASSWORD}" | docker login ${ARTIFACTORY_URL} -u "${ARTIFACTORY_USER}" --password-stdin
+    - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]') 
+    - echo  "NODE_VERSION - ${NODE_VERSION}"
     - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) # Extract alpine version (3.18, 3.19, 3.20)
     - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" # Construct the final tag
     - echo Building image - "$FINAL_IMAGE"
     - echo docker build -t "$FINAL_IMAGE" -f "$NODE_DIR/Dockerfile"
-    
+    - ls -a /kaniko/.docker/config.json
+    - cat /kaniko/.docker/config.json
+    - export DOCKER_CONFIG=/kaniko/.docker
+
     # Run Kaniko to build and push
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}/${NODE_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
       --destination "${FINAL_IMAGE}"
+      # --oci-layout-path /kaniko/cache \
+      # --registry-auth
+  volumes:
+    - name: kaniko-secret
+      mountPath: /kaniko/.docker
+  volumesMounts:
+    - name: kaniko-secret    
+      secret: 
+        secretName: ja-docker-secret
+        items: 
+          - key: .dockerconfigjson
+            path: config.json    
+
+
+

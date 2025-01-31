@@ -1,6 +1,6 @@
 # Use official Node.js image as the base
 FROM node:14
-
+ENV NODE_VERSION 17.0.1
 # Set the working directory in the container
 WORKDIR /app
 

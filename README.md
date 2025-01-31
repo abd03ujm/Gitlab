@@ -1,5 +1,5 @@
 ```bash
-kubectl create secret docker-registry regcred \
+kubectl create secret docker-registry-jw regcred \
   --docker-server=<your-registry> \
   --docker-username=<your-username> \
   --docker-password=<your-password> \

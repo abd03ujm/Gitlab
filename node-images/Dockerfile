@@ -1,17 +1,20 @@
-ARG NODE_VERSION
-FROM node:${NODE_VERSION}-alpine
+# Use official Node.js image as the base
+FROM node:14
 
-# Optional: Add metadata
-LABEL maintainer="devops"
-
-# Optional: Set a working directory
+# Set the working directory in the container
 WORKDIR /app
 
-# Optional: Copy files and install dependencies (if needed)
-COPY package*.json ./
-RUN npm install
+# Copy package.json and package-lock.json to the container
+#COPY package*.json ./
 
-# Optional: Copy application source
+# Install dependencies
+#RUN npm install
+
+# Copy the rest of the application files to the container
 COPY . .
 
-CMD ["node"]
+# Expose the application port
+EXPOSE 3000
+
+# Command to run the application
+CMD ["npm", "start"]

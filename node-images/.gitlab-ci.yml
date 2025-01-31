@@ -12,7 +12,21 @@ build:
       - NODE_DIR: ["17/alpine3.18", "18/alpine3.18", "20/alpine3.18"]
   script: 
     - echo "${CI_REGISTRY_PASSWORD}" | docker login registry.pgr.com -u "${CI_REGISTRY_USER}" --password-stdin
+    # Extract NODE_VERSION from Dockerfile
+    - NODE_VERSION=$(awk -F'=' '/ENV NODE_VERSION/{print $2}' "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile" | tr -d '[:space:]')
+    
+    # Extract ALPINE_VERSION from directory structure
+    - ALPINE_VERSION=$(echo "${NODE_DIR}" | cut -d'/' -f2)
+    
+    # Construct final image tag
+    - FINAL_TAG="node-${NODE_VERSION}-${ALPINE_VERSION}"
+    - IMAGE_NAME="registry.pgr.com/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}"
+    - FINAL_IMAGE="${IMAGE_NAME}:${FINAL_TAG}"
+    
+    - echo "Building image - ${FINAL_IMAGE}"
+    
+    # Run Kaniko to build and push
     - /kaniko/executor
-      --context "${CI_PROJECT_DIR}"
+      --context "${CI_PROJECT_DIR}/${NODE_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
-      --destination "registry.pgr.com/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}:${CI_COMMIT_TAG}-${NODE_DIR}"
+      --destination "${FINAL_IMAGE}"

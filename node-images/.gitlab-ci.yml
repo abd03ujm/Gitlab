@@ -12,7 +12,7 @@ build:
     entrypoint: [""]
   parallel:
     matrix:
-      - NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
+      - NODE_DIR: $(find . -name Dockerfile | sed 's|/Dockerfile||' | awk '{print "\"" $0 "\""}' ORS=',' | sed 's/,$/\n/')
   before_script:
     - echo "{\"auths\":{\"${ARTIFACTORY_URL}\":{\"username\":\"${ARTIFACTORY_USER}\",\"password\":\"${ARTIFACTORY_PASSWORD}\"}}}" > /kaniko/.docker/config.json
 
@@ -38,17 +38,7 @@ build:
       --dockerfile "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
       --destination "${FINAL_IMAGE}"
       # --oci-layout-path /kaniko/cache \
-      # --registry-auth
-  volumes:
-    - name: kaniko-secret
-      mountPath: /kaniko/.docker
-  volumesMounts:
-    - name: kaniko-secret    
-      secret: 
-        secretName: ja-docker-secret
-        items: 
-          - key: .dockerconfigjson
-            path: config.json    
+
 
 
 

@@ -16,7 +16,7 @@ build:
   before_script:
     - echo "{\"auths\":{\"${ARTIFACTORY_URL}\":{\"username\":\"${ARTIFACTORY_USER}\",\"password\":\"${ARTIFACTORY_PASSWORD}\"}}}" > /kaniko/.docker/config.json
     - export NODE_DIRS=$(find . -name Dockerfile | sed 's|/Dockerfile||' | awk '{print "\"" $0 "\""}' ORS=',' | sed 's/,$//')
-    - echo "Detected NODE_DIRS: $NODE_DIRS"
+    - echo Detected NODE_DIRS are  -  $NODE_DIRS"
 
   script: 
     - echo "CI_PROJECT_DIR - ${CI_PROJECT_DIR}"

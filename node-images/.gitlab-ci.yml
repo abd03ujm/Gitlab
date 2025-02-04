@@ -12,13 +12,11 @@ build:
     entrypoint: [""]
   parallel:
     matrix:
-      #- NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
-      - NODE_DIR: ${NODE_DIRS}
+      - NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
+
   before_script:
     - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-    - export NODE_DIRS=$(find . -name Dockerfile | sed 's|/Dockerfile||' | awk '{print "\"" $0 "\""}' ORS=',' | sed 's/,$//')
-    - echo Detected NODE_DIRS are  -  $NODE_DIRS   
 
   script: 
     - echo "CI_PROJECT_DIR - ${CI_PROJECT_DIR}"
@@ -44,9 +42,8 @@ build:
       --context "${CI_PROJECT_DIR}/${NODE_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
       --destination "${FINAL_IMAGE}" 
-  rules:
-    - changes:
-        - "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
+ 
+
 
 
   

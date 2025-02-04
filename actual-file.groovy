@@ -1,322 +1,296 @@
-Skip to sidebar navigation
-Skip to content
-Linked Applications
-Bitbucket
-Your work
-Projects
-Repositories
-Favorites
-Search for code, commits or repositories
-Search for code, commits or repositories...
-Help
-Inbox
-Logged in as Abdul, Javaid (CHICO-C) (2501440)
-Platform Engineering
-Clone
-Create pull request
-Create fork
-Compare
+package com.hyatt.ci.platform
 
-
-
-Source
-Commits
-Branches
-Graphs
-Pull requests
-Forks
-Builds
-
-Platform Engineering
-dsl-shared-utilities
-Source
-Source branchBranchmaster
-Branch actions
-dsl-shared-utilities/src/com/hyatt/ci/platform/Artifactory.groovy
-Bob Stevenson
-Bob Stevenson
- authored 
-50c352cde85
-09 Jan 2023
-Blame
-Raw file
-Source view
-Diff to previous
-History
-10.71 KB
-3
 // Hyatt Confidential
-4
 // by Robert Stevenson
-5
-​
-6
+
 private def found_existing_image(repo) {
-7
   if (env.GIT_TAG_MATCH == null || env.GIT_TAG_MATCH == "null") {
-8
     return false
-9
   }
-10
   if (repo == env.GIT_TAG_MATCH_REPO) {
-11
     return true
-12
   }
-13
   return false
-14
 }
-15
-​
-16
+
 def is_pr(change_id) {
-17
   if (change_id == null || change_id == 'null') {
-18
     return false
-19
   }
-20
   return true
-21
 }
-22
-​
-23
+
 def copy_image(artifactory_location, projectname, sourceRepo, sourceTag, targetRepo, targetTag) {
-24
   // promote image to production repository (file-move), removing the original dockerv2-local version
-25
   def body = "{\"targetRepo\" : \"${targetRepo}\", " +
-26
           "\"dockerRepository\" : \"${artifactory_location.toLowerCase()}/${projectname}\", " +
-27
           "\"tag\" : \"${sourceTag}\", " +
-28
           "\"targetTag\" : \"${targetTag}\", " +
-29
           "\"copy\": \"true\"} "
-30
-​
-31
+
   echo "Copying docker image [${artifactory_location.toLowerCase()}/${projectname}:${sourceTag}] to ${targetRepo} repo"
-32
   def result
-33
   withCredentials([string(credentialsId: 'jenkins_upload_api_key', variable: 'KEY')]) {
-34
     result = httpRequest url: "https://artifacts.hyattdev.com/artifactory/api/docker/${sourceRepo}/v2/promote",
-35
             httpMode: "POST",
-36
             contentType: "APPLICATION_JSON",
-37
             requestBody: body,
-38
             customHeaders: [[name: 'X-JFrog-Art-Api', value: KEY]],
-39
             validResponseCodes: "200,404"
-40
   }
-41
 }
-42
-​
-43
+
 def promote_image(artifactory_location, projectname, sourceTag, skipProdRepoCheck) {
-44
  promote_tagged_image(artifactory_location, projectname, "dockerv2-local", sourceTag, sourceTag.replace(".beta",""), skipProdRepoCheck, false) 
-45
 }
-46
-​
-47
+
 def promote_tagged_image(artifactory_location, projectname, sourceRepo, sourceTag, targetTag, skipProdRepoCheck, doCopy) {
-48
   //  Artifactory.docker.promote promotionConfig 
-49
-​
-50
+
   // promote image to production repository (file-move), removing the original dockerv2-local version
-51
   def body = "{\"targetRepo\" : \"dockerv2-prod\", " +
-52
           "\"dockerRepository\" : \"${artifactory_location.toLowerCase()}/${projectname}\", " +
-53
           "\"tag\" : \"${sourceTag}\", " +
-54
           "\"targetTag\" : \"${targetTag}\", " +
-55
           "\"copy\": \"${doCopy}\"} "
-56
-​
-57
+
   if (!is_pr(env.CHANGE_ID)) {
-58
     if (!found_existing_image("dockerv2-prod")) {
-59
-​
-60
+
       if (find_docker_image_with_tag("${projectname}", "${sourceRepo}", "${sourceTag}")) {
-61
         echo "found image in ${sourceRepo} ${projectname}:${sourceTag}"
-62
         if (skipProdRepoCheck == true || find_docker_image_with_tag("${projectname}", "dockerv2-prod", "${targetTag}") == null) {
-63
           if ( !skipProdRepoCheck ) {
-64
             echo "did not find image in dockerv2-prod ${artifactory_location.toLowerCase()}/${projectname}:${sourceTag}"
-65
           } else {
-66
             echo "skipping prod repo check"
-67
           }
-68
-​
-69
+
           echo "Promoting/moving docker image [${artifactory_location.toLowerCase()}/${projectname}:${sourceTag}] to ${targetTag} dockerv2-prod repo"
-70
           def result
-71
           withCredentials([string(credentialsId: 'jenkins_upload_api_key', variable: 'KEY')]) {
-72
             result = httpRequest url: "https://artifacts.hyattdev.com/artifactory/api/docker/${sourceRepo}/v2/promote",
-73
                     httpMode: "POST",
-74
                     contentType: "APPLICATION_JSON",
-75
                     requestBody: body,
-76
                     customHeaders: [[name: 'X-JFrog-Art-Api', value: KEY]],
-77
                     validResponseCodes: "200,404"
-78
           }
-79
         } else {
-80
           echo "found image in dockerv2-prod ${artifactory_location.toLowerCase()}/${projectname}:${sourceTag} skipping promotion"
-81
         }
-82
       } else {
-83
         echo "did not find image in ${sourceRepo} ${artifactory_location.toLowerCase()}/${projectname}:${sourceTag}, skipping promotion"
-84
       }
-85
     } else {
-86
       echo "Not promoting due to artifactory image match"
-87
     }
-88
   } else {
-89
     echo "Not promoting due to PR"
-90
   }
-91
 }
-92
-​
-93
+
 def promote_pipeline_stable(artifactory_location, projectname) {
-94
   //  Artifactory.docker.promote promotionConfig 
-95
-​
-96
+
   // copy tagged image to pipeline-stable tag, retaining the original image tag
-97
   def body = "{\"targetRepo\" : \"dockerv2-prod\", " +
-98
           "\"dockerRepository\" : \"${artifactory_location}/${projectname}\", " +
-99
           "\"tag\" : \"${env.DOCKER_TAG}\", " +
-100
           "\"targetTag\" : \"pipeline-stable\", " +
-101
           "\"copy\": true} "
-102
-​
-103
+
   if (!is_pr(env.CHANGE_ID)) {
-104
     if (!found_existing_image("dockerv2-prod")) {
-105
       echo "Promoting docker image to dockerv2-prod :pipeline-stable tag "
-106
       try {
-107
         def result
-108
         withCredentials([string(credentialsId: 'jenkins_upload_api_key', variable: 'KEY')]) {
-109
           result = httpRequest url: "https://artifacts.hyattdev.com/artifactory/api/docker/dockerv2-prod/v2/promote",
-110
                   httpMode: "POST",
-111
                   contentType: "APPLICATION_JSON",
-112
                   requestBody: body,
-113
                   customHeaders: [[name: 'X-JFrog-Art-Api', value: KEY]],
-114
                   validResponseCodes: "200,404"
-115
         }
-116
       }
-117
       catch (err) {
-118
         // ignore any promotion errors, because the old docker pipeline promotes already, so this one will fail
-119
       }
-120
     } else {
-121
       echo "promote_pipeline_stable, found existing image"
-122
     }
-123
   } else {
-124
     echo "promote_pipeline_stable, is a PR"
-125
   }
-126
 }
-127
-​
-128
+
 /*
-129
 we actually need to look in local repo and prod repo for a matching image
-130
  */
-131
-​
-132
+
 def find_docker_image(servicename, branch, equality) {
-133
   find_docker_image0(servicename, branch, equality, "docker")
-134
 }
-135
-​
-136
+
 private def find_docker_image_with_tag(servicename, repo, tag) {
-137
-​
-138
+
   def body = "items.find({\"repo\" : {\"\$eq\":\"${repo}\"}}," +
-139
           "{\"path\":{\"\$match\":\"${env.artifactory_location}/${servicename}/${tag}\"}})" +
-140
           ".sort({\"\$desc\":[\"created\"]})" +
+          ".limit(1) "
+
+  def result
+  withCredentials([string(credentialsId: 'jenkins_upload_api_key', variable: 'KEY')]) {
+    result = httpRequest url: "https://artifacts.hyattdev.com/artifactory/api/search/aql",
+            contentType: "TEXT_PLAIN",
+            httpMode: "POST",
+            requestBody: body,
+            customHeaders: [[name: 'X-JFrog-Art-Api', value: KEY]]
+  }
+
+  def object = readJSON text: result.content
+
+  if (object != null && object.results != null && object.results[0] != null) {
+    path = object.results[0].path
+    // replace the last slash with a : for the tag
+    int index = path.lastIndexOf("/")
+    return path.substring(index + 1)
+  } else {
+    return null
+  }
+}
+
+private def find_docker_image0(servicename, branch, equality, repo) {
+
+  def body = "items.find({\"repo\" : {\"\$eq\":\"${repo}\"}}," +
+          "{\"@docker.label.git.branch\" : {\"\$${equality}\" : \"${branch.replace("/", "-").replace(".", "-")}\"}}," +
+          "{\"path\":{\"\$match\":\"${env.artifactory_location}/${servicename}/*\"}})" +
+          ".sort({\"\$desc\":[\"created\"]})" +
+          ".limit(1) "
+  def result
+  withCredentials([string(credentialsId: 'jenkins_upload_api_key', variable: 'KEY')]) {
+    result = httpRequest url: "https://artifacts.hyattdev.com/artifactory/api/search/aql",
+            contentType: "TEXT_PLAIN",
+            httpMode: "POST",
+            requestBody: body,
+            customHeaders: [[name: 'X-JFrog-Art-Api', value: KEY]]
+  }
+
+  def object = readJSON text: result.content
+
+  if (object != null && object.results != null && object.results[0] != null) {
+    path = object.results[0].path
+    // replace the last slash with a : for the tag
+    int index = path.lastIndexOf("/")
+    return path.substring(index + 1)
+  } else {
+    return null
+  }
+}
+
+def find_docker_image_by_sum(servicename, sum, equality) {
+  find_docker_image_by_sum0(servicename, sum, equality, "docker")
+}
+
+private def find_docker_image_by_sum0(servicename, sum, equality, repo) {
+
+  def extension
+  def projectName = servicename
+  if (env["buildonly"]) {
+    if (env.buildonly == true || env.buildonly == "true") {
+      projectName = "${projectName}-buildonly"
+    }
+  }
+  if (env["custombuild"]) {
+    if (env.custombuild == true || env.custombuild == "true") {
+      projectName = "${projectName}-buildonly"
+    }
+  }
+
+  def body = "items.find({\"repo\" : {\"\$eq\":\"${repo}\"}}," +
+          "{\"@docker.label.source.sum\" : {\"\$${equality}\" : \"${sum}\"}}," +
+          "{\"path\":{\"\$match\":\"*${env.artifactory_location}/${projectName}/*\"}})" +
+          ".sort({\"\$desc\":[\"created\"]})" +
+          ".limit(1) "
+
+  echo body
+
+  def k
+  def result
+  withCredentials([string(credentialsId: 'jenkins_upload_api_key', variable: 'KEY')]) {
+    k = "${KEY}"
+    result = httpRequest url: "https://artifacts.hyattdev.com/artifactory/api/search/aql",
+            contentType: "TEXT_PLAIN",
+            httpMode: "POST",
+            customHeaders: [[name: 'X-JFrog-Art-Api', value: KEY]],
+            requestBody: body
+  }
+//  echo k
+
+  def object = readJSON text: result.content
+
+  echo object.toString()
+
+  def repository
+  if (object != null && object.results != null && object.results[0] != null) {
+    path = object.results[0].path
+    // replace the last slash with a : for the tag
+    int index = path.lastIndexOf("/")
+    repository = object.results[0].repo
+    return [path.substring(index + 1), repository]
+  } else {
+    return [null,null]
+  }
+}
+
+def find_docker_version_by_name(imagename) {
+
+  def result
+  withCredentials([string(credentialsId: 'jenkins_upload_api_key', variable: 'KEY')]) {
+    result = httpRequest url: "https://artifacts.hyattdev.com/artifactory/api/storage/docker/docker/${imagename.replace(":", "/")}/manifest.json?properties",
+            contentType: "TEXT_PLAIN",
+            httpMode: "GET",
+            customHeaders: [[name: 'X-JFrog-Art-Api', value: KEY]]
+
+  }
+
+  def object = readJSON text: result.content
+
+  echo object.toString()
+
+  if (object != null && object.properties != null) {
+    properties = object.properties
+    if (properties['docker.label.docker.tag'] != null) {
+      return properties['docker.label.docker.tag'][0]
+    }
+  } else {
+    return null
+  }
+}
+
+def get_dependency_docker_image_tags(dep_list) {
+  dep_versions = []
+  def artifactory = new com.hyatt.ci.platform.Artifactory()
+  for (dep in dep_list) {
+    // if current branch version is out there grab its version
+    docker_tag = artifactory.find_docker_image(dep, git_branch_to_build, "eq")
+    if (docker_tag == null) {
+      // if master branch version is out there grab its version
+      docker_tag = artifactory.find_docker_image(dep, "master", "eq")
+      if (docker_tag == null) {
+        // else just grab latest built version
+        docker_tag = artifactory.find_docker_image(dep, "", "ne")
+      }
+    }
+    if (docker_tag == null) {
+      //dep_versions.push("${dep}-deployed-image-not-found")
+      //fail "${dep} docker image missing..."
+      //dep_versions.push(env.DOCKER_TAG)
+      return dep_versions
+    } else {
+      dep_versions.push(docker_tag)
+    }
+  }
+  return dep_versions
+}

@@ -22,12 +22,13 @@ build:
     - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
 
   script: 
+    - | 
     - echo "CI_PROJECT_DIR - ${CI_PROJECT_DIR}"
     - echo "NODE_DIR - ${NODE_DIR}"
     - echo "Checking Dockerfile Path - ${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
     - ls -al "${CI_PROJECT_DIR}/${NODE_DIR}"
-    - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) # Extract alpine version (3.18, 3.19, 3.20)
-    - FINAL_IMAGE="$IMAGE_NAME:-${ALPINE_VERSION}" # Construct the final tag
+    - ALPINE_VERSION=$(awk '/^FROM/ {print $2}' $NODE_DIR/Dockerfile) 
+    - FINAL_IMAGE="$IMAGE_NAME/${ALPINE_VERSION}" # Construct the final tag
     - echo Building image - "$FINAL_IMAGE"
     - echo docker build -t "$FINAL_IMAGE" -f "$NODE_DIR/Dockerfile"
     - ls -a /kaniko/.docker/config.json
@@ -47,6 +48,5 @@ build:
 
 
   
-
 
 

@@ -3,7 +3,9 @@ stages:
 variables:
   ARTIFACTORY_USER: 2501440
   ARTIFACTORY_URL: "https://docker.hyattdev.com"
-  IMAGE_NAME: docker.hyattdev.com/docker/alpine-node
+  #IMAGE_NAME: docker.hyattdev.com/docker/alpine-node
+  IMAGE_NAME: docker.hyattdev.com/docker/digital-product/digital-architecture
+
   
 build:
   stage: build
@@ -23,7 +25,7 @@ build:
     - echo "NODE_DIR - ${NODE_DIR}"
     - echo "Checking Dockerfile Path - ${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
     - ls -al "${CI_PROJECT_DIR}/${NODE_DIR}"
-    # - echo "${ARTIFACTORY_PASSWORD}" | docker login ${ARTIFACTORY_URL} -u "${ARTIFACTORY_USER}" --password-stdin
+    #- echo "${ARTIFACTORY_PASSWORD}" | docker login ${ARTIFACTORY_URL} -u "${ARTIFACTORY_USER}" --password-stdin
     - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]') 
     - echo  "NODE_VERSION - ${NODE_VERSION}"
     - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) # Extract alpine version (3.18, 3.19, 3.20)
@@ -34,14 +36,14 @@ build:
     - cat /kaniko/.docker/config.json
     - export DOCKER_AUTH_CONFIG=/kaniko/.docker
 
-    ## Run Kaniko to build and push
+    # Run Kaniko to build and push
     # - mkdir -p /kaniko/.docker
     # - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
     - cat /kaniko/.docker/config.json
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}/${NODE_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
-      --destination "${FINAL_IMAGE}" 
+      --destination "${FINAL_IMAGE}"
  
 
 

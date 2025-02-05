@@ -4,7 +4,7 @@ variables:
   ARTIFACTORY_USER: 2501440
   ARTIFACTORY_URL: "https://docker.hyattdev.com"
   #IMAGE_NAME: docker.hyattdev.com/docker/alpine-node
-  IMAGE_NAME: docker.hyattdev.com/docker/gitlab-poc/base-images
+  IMAGE_NAME: docker.hyattdev.com/docker/gitlab-poc/base-images/alpine
   
 
   
@@ -15,7 +15,7 @@ build:
     entrypoint: [""]
   parallel:
     matrix:
-      - NODE_DIR: ["alpine3.20"]
+      - NODE_DIR: ["alpine3.2.0"]
 
   before_script:
     - mkdir -p /kaniko/.docker
@@ -27,8 +27,8 @@ build:
     - echo "NODE_DIR - ${NODE_DIR}"
     - echo "Checking Dockerfile Path - ${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
     - ls -al "${CI_PROJECT_DIR}/${NODE_DIR}"
-    - ALPINE_VERSION=$(awk '/^FROM/ {print $2}' $NODE_DIR/Dockerfile) 
-    - FINAL_IMAGE="$IMAGE_NAME/${ALPINE_VERSION}" # Construct the final tag
+    - ALPINE_VERSION=$(cat ${NODE_DIR}/Dockerfile | awk '/^FROM/ {print $2}') 
+    - FINAL_IMAGE="${IMAGE_NAME}/${ALPINE_VERSION}" # Construct the final tag
     - echo Building image - "$FINAL_IMAGE"
     - echo docker build -t "$FINAL_IMAGE" -f "$NODE_DIR/Dockerfile"
     - ls -a /kaniko/.docker/config.json

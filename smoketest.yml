@@ -1,0 +1,6 @@
+docker_deploy:
+  stage: deploy
+  image: docker:latest
+  services:
+    - name: docker:24.0.5-dind
+      command: ["--host=tcp://0.0.0.0:2375"]

@@ -44,6 +44,9 @@ build:
       --context "${CI_PROJECT_DIR}/${NODE_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
       --destination "${FINAL_IMAGE}"
+  rules:
+    - changes:
+        - "${NODE_DIR}/Dockerfile"
  
 
 

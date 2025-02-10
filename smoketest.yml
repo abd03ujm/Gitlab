@@ -49,6 +49,7 @@ build:
   rules:
     - changes:
         - "${NODE_DIR}/Dockerfile"
+  when: manual      
 smoke_test:
   stage: smoke_test
   image:
@@ -64,24 +65,22 @@ smoke_test:
     # - mkdir -p /kaniko/.docker
     # - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
     - mkdir -p .kube
-    - echo "$kubeconfig_smoketest_file" | base64 -d > .kube/config 
+    - echo "$KUBE_CONFIG" | base64 -d > .kube/config
+
   script: 
 
     - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]') 
     - echo  "NODE_VERSION - ${NODE_VERSION}"
-    - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) # Extract alpine version (3.18, 3.19, 3.20)
-    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" # Construct the final tag
+    - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) 
+    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" 
     - echo Building image - "$FINAL_IMAGE"
     - echo checking node version from - $FINAL_IMAGE 
-    - cat .kube/config
-    # - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-    # - chmod 755 kubectl && mv kubectl /usr/local/bin/
-    - kubectl get nodes
-    - echo checking node version from - kubectl run test-node-version --image=${FINAL_IMAGE} -it --rm -- node -v
-    # - kubectl run test-node-version --image=${FINAL_IMAGE} -it --rm -- node -v
-    
-    
-    #- docker run -it docker.hyattdev.com/docker/poc/base-images/alpine:node-18.20.5-alpine3.20 node -v
+    - kubectl run test-node-version --image=${FINAL_IMAGE}  -- sh -c "node -v && npm -v && cat /etc/alpine-release"
+    - sleep 10
+    - kubectl logs test-node-version > versions.txt
+    - 
+    - kubectl delete pod test-node-version
+
   rules:
     - changes:
         - "${NODE_DIR}/Dockerfile"

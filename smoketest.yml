@@ -51,10 +51,9 @@ build:
         - "${NODE_DIR}/Dockerfile"
 smoke_test:
   stage: smoke_test
-  image: docker:latest
-  services:
-    - name: docker:24.0.5-dind
-      command: ["--host=tcp://0.0.0.0:2375"]
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
   parallel:
     matrix:
       - NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
@@ -69,8 +68,12 @@ smoke_test:
     - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) # Extract alpine version (3.18, 3.19, 3.20)
     - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" # Construct the final tag
     - echo Building image - "$FINAL_IMAGE"
-    - echo docker run -it $FINAL_IMAGE node -v
-    - docker run --rm $FINAL_IMAGE node -v
+    - echo checking node version from - $FINAL_IMAGE 
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod 755 kubectl && mv kubectl /usr/local/bin/
+    - echo checking node version from - kubectl run test-node-version --image=${FINAL_IMAGE} -it --rm -- node -v
+    - kubectl run test-node-version --image=${FINAL_IMAGE} -it --rm -- node -v
+    
     #- docker run -it docker.hyattdev.com/docker/poc/base-images/alpine:node-18.20.5-alpine3.20 node -v
   rules:
     - changes:

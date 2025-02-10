@@ -52,7 +52,7 @@ build:
 smoke_test:
   stage: smoke_test
   image:
-    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    name: image: bitnami/kubectl:latest 
     entrypoint: [""]
   parallel:
     matrix:

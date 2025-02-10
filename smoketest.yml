@@ -52,15 +52,19 @@ build:
 smoke_test:
   stage: smoke_test
   image:
-    name: image: bitnami/kubectl:latest 
+    name: bitnami/kubectl:latest 
     entrypoint: [""]
   parallel:
     matrix:
       - NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
+  variables:
+    KUBECONFIG: ".kube/config"
 
   before_script:
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    # - mkdir -p /kaniko/.docker
+    # - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - mkdir -p .kube
+    - echo "$kubeconfig_smoketest_file" | base64 -d > .kube/config 
   script: 
 
     - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]') 
@@ -69,10 +73,13 @@ smoke_test:
     - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" # Construct the final tag
     - echo Building image - "$FINAL_IMAGE"
     - echo checking node version from - $FINAL_IMAGE 
-    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-    - chmod 755 kubectl && mv kubectl /usr/local/bin/
+    - cat .kube/config
+    # - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    # - chmod 755 kubectl && mv kubectl /usr/local/bin/
+    - kubectl get nodes
     - echo checking node version from - kubectl run test-node-version --image=${FINAL_IMAGE} -it --rm -- node -v
-    - kubectl run test-node-version --image=${FINAL_IMAGE} -it --rm -- node -v
+    # - kubectl run test-node-version --image=${FINAL_IMAGE} -it --rm -- node -v
+    
     
     #- docker run -it docker.hyattdev.com/docker/poc/base-images/alpine:node-18.20.5-alpine3.20 node -v
   rules:

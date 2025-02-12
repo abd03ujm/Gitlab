@@ -6,6 +6,7 @@ variables:
   ARTIFACTORY_URL: "https://docker.hyattdev.com"
   #IMAGE_NAME: docker.hyattdev.com/docker/alpine-node
   IMAGE_NAME: docker.hyattdev.com/docker/poc/base-images/alpine
+  POD_NAME: ${NODE_VERSION}-${ALPINE_VERSION}
 
   
 build:
@@ -15,7 +16,8 @@ build:
     entrypoint: [""]
   parallel:
     matrix:
-      - NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
+      #- NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
+      - export NODE_DIR=$(grep 'NODE_DIR' manifest | cut -d':' -f2 | tr -d '[]" ')
 
   before_script:
     - mkdir -p /kaniko/.docker
@@ -57,7 +59,8 @@ smoke_test:
     entrypoint: [""]
   parallel:
     matrix:
-      - NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]
+    - NODE_DIR: ["18/alpine3.20", "18/alpine3.21", "20/alpine3.20", "20/alpine3.21", "22/alpine3.20", "22/alpine3.21"]      
+      
   variables:
     KUBECONFIG: ".kube/config"
 
@@ -69,26 +72,24 @@ smoke_test:
 
   script: 
 
+    - echo The NODE_DIR values are - $NODE_DIR
     - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]') 
     - echo  "NODE_VERSION - ${NODE_VERSION}"
     - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) 
     - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" 
     - echo Building image - "$FINAL_IMAGE"
     - echo checking node version from - $FINAL_IMAGE 
-    - kubectl run test-node-version --image=${FINAL_IMAGE}  -- sh -c "node -v && npm -v && cat /etc/alpine-release"
+    - kubectl get pod test-node-version > /dev/null 2>&1 && kubectl delete pod test-node-version || echo "Pod test-node-version not found"
+    - kubectl run test-node-version --image=${FINAL_IMAGE}   -- sh -c "echo 'Node Version:' && node -v && echo 'NPM Version:' && npm -v && echo 'Alpine Release:' && cat /etc/alpine-release"
     - sleep 10
-    - kubectl logs test-node-version > versions.txt
-    - 
+    #- kubectl logs test-node-version > $NODE_DIR/versions.txt
+    - while [[ $(kubectl get pod test-node-version -o jsonpath='{.status.phase}') != "Running" ]]; do echo "Waiting for pod to be in Running state..."; sleep 30; done; kubectl logs test-node-version > $NODE_DIR/versions.txt
+    - 'cat $NODE_DIR/versions.txt | jq -R -s ''split("\n") | map(select(length > 0)) | {versions: .}'' > $NODE_DIR/versions.json'
     - kubectl delete pod test-node-version
+  artifacts:
+    paths:
+      - $NODE_DIR/versions.json
 
   rules:
     - changes:
         - "${NODE_DIR}/Dockerfile"
-
-
-
-  
-
-
-
-

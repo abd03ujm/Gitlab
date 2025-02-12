@@ -39,10 +39,10 @@ build:
     - cat /kaniko/.docker/config.json
     - export DOCKER_AUTH_CONFIG=/kaniko/.docker
 
-    # Run Kaniko to build and push
-    # - mkdir -p /kaniko/.docker
-    # - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-    # - cat /kaniko/.docker/config.json
+    #Run Kaniko to build and push
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - cat /kaniko/.docker/config.json
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}/${NODE_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile"
@@ -79,8 +79,10 @@ smoke_test:
     - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" 
     - echo Building image - "$FINAL_IMAGE"
     - echo checking node version from - $FINAL_IMAGE 
-    - kubectl get pod test-node-version > /dev/null 2>&1 && kubectl delete pod test-node-version || echo "Pod test-node-version not found"
-    - kubectl run test-node-version --image=${FINAL_IMAGE}   -- sh -c "echo 'Node Version:' && node -v && echo 'NPM Version:' && npm -v && echo 'Alpine Release:' && cat /etc/alpine-release"
+    - POD_NAME=test-node-version$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]' | sed 's/\./-/g')
+    - kubectl get pod $POD_NAME- > /dev/null 2>&1 && kubectl delete pod $POD_NAME|| echo "Pod $POD_NAME not found"
+    
+    - kubectl run $POD_NAME --image=${FINAL_IMAGE}   -- sh -c "echo 'Node Version:' && node -v && echo 'NPM Version:' && npm -v && echo 'Alpine Release:' && cat /etc/alpine-release"
     - sleep 10
     #- kubectl logs test-node-version > $NODE_DIR/versions.txt
     - while [[ $(kubectl get pod test-node-version -o jsonpath='{.status.phase}') != "Running" ]]; do echo "Waiting for pod to be in Running state..."; sleep 30; done; kubectl logs test-node-version > $NODE_DIR/versions.txt

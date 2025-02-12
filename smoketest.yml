@@ -79,15 +79,16 @@ smoke_test:
     - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" 
     - echo Building image - "$FINAL_IMAGE"
     - echo checking node version from - $FINAL_IMAGE 
+    - POD_ALPINE=$(echo $NODE_DIR | sed 's/\//-/g' | sed 's/\./-/g' | sed 's/-$//')
     - POD_NAME=test-node-version$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]' | sed 's/\./-/g')
-    - kubectl get pod $POD_NAME- > /dev/null 2>&1 && kubectl delete pod $POD_NAME|| echo "Pod $POD_NAME not found"
+    - kubectl get pod $POD_NAME-alpine-$POD_ALPINE > /dev/null 2>&1 && kubectl delete pod $POD_NAME-alpine-$POD_ALPINE|| echo "Pod $POD_NAME-alpine-$POD_ALPINE not found"
     
-    - kubectl run $POD_NAME --image=${FINAL_IMAGE}   -- sh -c "echo 'Node Version:' && node -v && echo 'NPM Version:' && npm -v && echo 'Alpine Release:' && cat /etc/alpine-release"
+    - kubectl run $POD_NAME-alpine-$POD_ALPINE --image=${FINAL_IMAGE}   -- sh -c "echo 'Node Version:' && node -v && echo 'NPM Version:' && npm -v && echo 'Alpine Release:' && cat /etc/alpine-release"
     - sleep 10
     #- kubectl logs test-node-version > $NODE_DIR/versions.txt
-    - while [[ $(kubectl get pod test-node-version -o jsonpath='{.status.phase}') != "Running" ]]; do echo "Waiting for pod to be in Running state..."; sleep 30; done; kubectl logs test-node-version > $NODE_DIR/versions.txt
+    - while [[ $(kubectl get pod $POD_NAME-alpine-$POD_ALPINE-o jsonpath='{.status.phase}') != "Running" ]]; do echo "Waiting for pod to be in Running state..."; sleep 30; done; kubectl logs $POD_NAME-alpine-$POD_ALPINE > $NODE_DIR/versions.txt
     - 'cat $NODE_DIR/versions.txt | jq -R -s ''split("\n") | map(select(length > 0)) | {versions: .}'' > $NODE_DIR/versions.json'
-    - kubectl delete pod test-node-version
+    - kubectl delete pod $POD_NAME-alpine-$POD_ALPINE
   artifacts:
     paths:
       - $NODE_DIR/versions.json

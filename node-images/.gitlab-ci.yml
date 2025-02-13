@@ -34,7 +34,7 @@ build:
     - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]') 
     - echo  "NODE_VERSION - ${NODE_VERSION}"
     - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) # Extract alpine version (3.18, 3.19, 3.20)
-    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" # Construct the final tag
+    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}-$CI_COMMIT_SHA" # Construct the final tag
     - echo Building image - "$FINAL_IMAGE"
     - echo docker build -t "$FINAL_IMAGE" -f "$NODE_DIR/Dockerfile"
     - ls -a /kaniko/.docker/config.json
@@ -78,7 +78,7 @@ smoke_test:
     - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]') 
     - echo  "NODE_VERSION - ${NODE_VERSION}"
     - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2) 
-    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}" 
+    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}-$CI_COMMIT_SHA" 
     - echo Building image - "$FINAL_IMAGE"
     - echo checking node version from - $FINAL_IMAGE 
     - POD_ALPINE=$(echo $NODE_DIR | sed 's/\//-/g' | sed 's/\./-/g' | sed 's/-$//')

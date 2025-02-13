@@ -20,5 +20,4 @@
   rules:
     - changes:
         - "${NODE_DIR}/Dockerfile"
-  tags:
-    - k8s-runner
+

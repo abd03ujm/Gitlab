@@ -1,0 +1,35 @@
+stages:
+  - build
+  - smoke_test
+
+include:
+  - local: 'ci-templates/build-template.yml'
+  - local: 'ci-templates/smoke-test-template.yml'
+
+variables:
+  ARTIFACTORY_USER: 2501440
+  ARTIFACTORY_URL: "https://docker.hyattdev.com"
+  IMAGE_NAME: docker.hyattdev.com/docker/poc/base-images/alpine
+  POD_NAME: ${NODE_VERSION}-${ALPINE_VERSION}
+
+.matrix:
+  parallel:
+    matrix:
+      - NODE_DIR: ["17/alpine3.18", "18/alpine3.18"]   ## user Dockerfile pointing that will point to build and somoke test pipelines
+
+# Define actual jobs that will be visible and use the templates###
+build:
+  extends: 
+    - .build_template
+    - .matrix
+#   variables:
+#     NODE_VERSIONS: "17/alpine3.18 18/alpine3.18"
+####
+smoke_test:
+  extends: 
+    - .smoke_test_template
+    - .matrix
+
+#   variables:##
+#     NODE_VERSIONS: "17/alpine3.18 18/alpine3.18"
+##

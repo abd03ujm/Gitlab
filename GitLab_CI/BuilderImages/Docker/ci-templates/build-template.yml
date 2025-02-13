@@ -1,0 +1,24 @@
+.build_template:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  # parallel:
+  #   matrix:
+  #     - NODE_DIR: ["17/alpine3.18", "18/alpine3.18"]
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+  script:
+    - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]')
+    - echo "NODE_VERSION - ${NODE_VERSION}"
+    - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2)
+    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}"
+    - echo "Building image - $FINAL_IMAGE"
+    - export DOCKER_AUTH_CONFIG=/kaniko/.docker
+    # - /kaniko/executor --context "${CI_PROJECT_DIR}/${NODE_DIR}" --dockerfile "${CI_PROJECT_DIR}/${NODE_DIR}/Dockerfile" --destination "${FINAL_IMAGE}"
+  rules:
+    - changes:
+        - "${NODE_DIR}/Dockerfile"
+  tags:
+    - k8s-runner

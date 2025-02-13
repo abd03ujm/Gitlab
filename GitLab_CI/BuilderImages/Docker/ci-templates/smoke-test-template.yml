@@ -1,0 +1,35 @@
+.smoke_test_template:
+  stage: smoke_test
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  # parallel:
+  #   matrix:
+  #     - NODE_DIR: ["17/alpine3.18", "18/alpine3.18"]
+  variables:
+    KUBECONFIG: ".kube/config"
+  before_script:
+    - mkdir -p .kube
+    - echo "$KUBE_CONFIG" | base64 -d > .kube/config
+  script:
+    - NODE_VERSION=$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]')
+    - ALPINE_VERSION=$(echo $NODE_DIR | cut -d'/' -f2)
+    - FINAL_IMAGE="$IMAGE_NAME:node-${NODE_VERSION}-${ALPINE_VERSION}"
+    - POD_ALPINE=$(echo $NODE_DIR | sed 's/\//-/g' | sed 's/\./-/g' | sed 's/-$//')
+    - POD_NAME=test-node-version$(awk '/ENV NODE_VERSION/{print $3}' $NODE_DIR/Dockerfile | tr -d '[:space:]' | sed 's/\./-/g')
+    - echo $POD_NAME-alpine-$POD_ALPINE
+    # - kubectl get pod $POD_NAME-alpine-$POD_ALPINE > /dev/null 2>&1 && kubectl delete pod $POD_NAME-alpine-$POD_ALPINE || echo "Pod not found"
+    # - kubectl run $POD_NAME-alpine-$POD_ALPINE --image=${FINAL_IMAGE} -- sh -c "echo 'Node Version:' && node -v && echo 'NPM Version:' && npm -v && echo 'Alpine Release:' && cat /etc/alpine-release"
+    # - sleep 10
+    # - while [[ $(kubectl get pod $POD_NAME-alpine-$POD_ALPINE -o jsonpath='{.status.phase}') != "Running" ]]; do echo "Waiting..."; sleep 5; done
+    # - kubectl logs $POD_NAME-alpine-$POD_ALPINE > $NODE_DIR/versions.txt
+    # - cat $NODE_DIR/versions.txt | jq -R -s 'split("\n") | map(select(length > 0)) | {versions: .}' > $NODE_DIR/versions.json
+    # - kubectl delete pod $POD_NAME-alpine-$POD_ALPINE
+  artifacts:
+    paths:
+      - $NODE_DIR/versions.json
+  rules:
+    - changes:
+        - "${NODE_DIR}/Dockerfile"
+
+  

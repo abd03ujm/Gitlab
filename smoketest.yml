@@ -88,7 +88,7 @@ smoke_test:
     #- kubectl logs test-node-version > $NODE_DIR/versions.txt
     - | 
       while [[ $(kubectl get pod $POD_NAME-alpine-$POD_ALPINE -o jsonpath='{.status.phase}') != "Running" || \
-         $(kubectl get pod $POD_NAME-alpine-$POD_ALPINE -o jsonpath='{.status.phase}') != "Succeeded" ]]; do
+         $(kubectl get pod $POD_NAME-alpine-$POD_ALPINE -o jsonpath='{.status.phase}') != "Completed" ]]; do
 
         echo "Waiting for pod to be in Running or Succeeded state...";
         sleep 5;  # Wait for 5 seconds before checking again

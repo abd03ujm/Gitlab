@@ -86,6 +86,16 @@ smoke_test:
     - kubectl run $POD_NAME-alpine-$POD_ALPINE --image=${FINAL_IMAGE}   -- sh -c "echo 'Node Version:' && node -v && echo 'NPM Version:' && npm -v && echo 'Alpine Release:' && cat /etc/alpine-release"
     - sleep 10
     #- kubectl logs test-node-version > $NODE_DIR/versions.txt
+    - | 
+      while [[ $(kubectl get pod $POD_NAME-alpine-$POD_ALPINE -o jsonpath='{.status.phase}') != "Running" || \
+         $(kubectl get pod $POD_NAME-alpine-$POD_ALPINE -o jsonpath='{.status.phase}') != "Succeeded" ]]; do
+
+        echo "Waiting for pod to be in Running or Succeeded state...";
+        sleep 5;  # Wait for 5 seconds before checking again
+
+      done; 
+
+    - kubectl logs $POD_NAME-alpine-$POD_ALPINE > $DIR_STRUCTURE/versions.txt
     - while [[ $(kubectl get pod $POD_NAME-alpine-$POD_ALPINE-o jsonpath='{.status.phase}') != "Running" ]]; do echo "Waiting for pod to be in Running state..."; sleep 30; done; kubectl logs $POD_NAME-alpine-$POD_ALPINE > $NODE_DIR/versions.txt
     - 'cat $NODE_DIR/versions.txt | jq -R -s ''split("\n") | map(select(length > 0)) | {versions: .}'' > $NODE_DIR/versions.json'
     - kubectl delete pod $POD_NAME-alpine-$POD_ALPINE

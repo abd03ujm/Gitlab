@@ -1,0 +1,37 @@
+
+stages:
+  - build
+
+# Define the Docker image name and tag
+variables:
+  ARTIFACTORY_USER: 2501440
+  ARTIFACTORY_URL: "https://docker.hyattdev.com"
+  IMAGE_NAME: docker.hyattdev.com/docker/poc/base-images/alpine
+  KANIKO_IMAGE: gcr.io/kaniko-project/executor:v1.23.2-debug
+  TAG_VERSION: alpine3.21 # Kaniko image to use
+
+# Build stage with Kaniko
+build:
+  stage: build
+  image: $KANIKO_IMAGE  # Use Kaniko to build the image
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - cp alpine3.2.0/certs/HYTROOTCA.pem /kaniko/ssl/certs/HYTROOTCA.pem
+    - cat /kaniko/ssl/certs/HYTROOTCA.pem >> /kaniko/ssl/certs/ca-certificates.crt
+  script:
+    - echo "{\"auths\":{\"$ARTIFACTORY_URL\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - cp alpine3.2.0/certs/HYTROOTCA.pem /kaniko/ssl/certs/HYTROOTCA.pem
+    - cat /kaniko/ssl/certs/HYTROOTCA.pem >> /kaniko/ssl/certs/ca-certificates.crt
+    - |
+      FINAL_IMAGE="${IMAGE_NAME}:${TAG_VERSION}"
+      echo "Building Docker image: $FINAL_IMAGE"
+      /kaniko/executor --context "${CI_PROJECT_DIR}/alpine3.2.0" --dockerfile "${CI_PROJECT_DIR}/alpine3.2.0/Dockerfile" --destination "$FINAL_IMAGE"  --verbosity=debug
+
+      
+
+
+
+
+
+  

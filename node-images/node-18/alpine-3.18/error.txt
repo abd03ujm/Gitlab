@@ -1,0 +1,9 @@
+INFO[0021] CMD [ "node" ]                               
+DEBU[0021] Build: skipping snapshot for [CMD [ "node" ]] 
+DEBU[0021] Mapping stage idx 0 to digest sha256:aad015a714f95e280e3a3130c2531f7acd6904ec203f6bf7717b50620d54007e 
+DEBU[0021] Mapping digest sha256:aad015a714f95e280e3a3130c2531f7acd6904ec203f6bf7717b50620d54007e to cachekey  
+INFO[0021] Pushing image to docker.hyattdev.com/docker/poc/base-images/alpine:alpine3.21 
+error pushing image: failed to push to destination docker.hyattdev.com/docker/poc/base-images/alpine:alpine3.21: PUT https://docker.hyattdev.com/v2/docker/poc/base-images/alpine/manifests/alpine3.21: MANIFEST_INVALID: manifest invalid; map[description:null]
+Cleaning up project directory and file based variables
+00:01
+ERROR: Job failed: command terminated with exit code 1

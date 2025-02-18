@@ -7,3 +7,23 @@ error pushing image: failed to push to destination docker.hyattdev.com/docker/po
 Cleaning up project directory and file based variables
 00:01
 ERROR: Job failed: command terminated with exit code 1
+*************************************
+ => ERROR [4/4] RUN apk update && apk add --no-cache openssl ca-certificates                                                 2.3s
+------                                                                                                                            
+ > [4/4] RUN apk update && apk add --no-cache openssl ca-certificates:                                                            
+0.065 fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/APKINDEX.tar.gz                                              
+1.161 20FD2781FFFF0000:error:0A000086:SSL routines:tls_post_process_server_certificate:certificate verify failed:ssl/statem/statem_clnt.c:2103:                                                                                                                     
+1.164 fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/community/aarch64/APKINDEX.tar.gz                                         
+1.165 WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.20/main: Permission denied
+2.253 20FD2781FFFF0000:error:0A000086:SSL routines:tls_post_process_server_certificate:certificate verify failed:ssl/statem/statem_clnt.c:2103:
+2.256 WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.20/community: Permission denied
+2.256 4 unavailable, 0 stale; 14 distinct packages available
+------
+Dockerfile:5
+--------------------
+   3 |     RUN mkdir -p /usr/local/share/ca-certificates
+   4 |     COPY certs/*.pem /usr/local/share/ca-certificates/
+   5 | >>> RUN apk update && apk add --no-cache openssl ca-certificates
+   6 |     
+--------------------
+ERROR: failed to solve: process "/bin/sh -c apk update && apk add --no-cache openssl ca-certificates" did not complete successfully: exit code: 4

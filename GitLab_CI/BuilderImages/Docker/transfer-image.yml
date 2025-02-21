@@ -1,12 +1,29 @@
-transfer_image:
-  image: gcr.io/kaniko-project/executor:latest
-  stage: transfer
-  dependencies:
-    - build_image
+image: debian:latest  # Use a Debian-based image (or switch to Fedora for better Podman support)
+
+stages:
+  - build
+  - push
+
+variables:
+  IMAGE_NAME: "myapp"
+  IMAGE_TAG: "$CI_COMMIT_REF_SLUG"
+  REGISTRY: "$CI_REGISTRY"
+  CONTAINER_RUNTIME: "podman"
+  XDG_RUNTIME_DIR: "/run/user/$(id -u)"  # Ensures rootless Podman works
+
+before_script:
+  - apt-get update && apt-get install -y podman  # Install Podman
+  - podman --version  # Check Podman version
+
+build:
+  stage: build
   script:
-    - export BASE_IMAGE=$(cat image_tag.txt)
-    - echo "FROM $BASE_IMAGE" > Dockerfile
-    - mkdir -p /kaniko/.docker
-    - echo '{ "auths": { "registry.gitlab.com": { "auth": "'$(echo -n "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" | base64 -w 0)'" }, "mycompany.jfrog.io": { "auth": "'$(echo -n "$JFROG_USER:$JFROG_PASSWORD" | base64 -w 0)' } } }' > /kaniko/.docker/config.json
-    - echo "Using image tag: $IMAGE_TAG"
-    - /kaniko/executor --dockerfile Dockerfile --context dir:///workspace --destination $JFROG_IMAGE:$IMAGE_TAG
+    - podman build -t $IMAGE_NAME:$IMAGE_TAG .
+    - podman images  # Verify the built image
+
+push:
+  stage: push
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | podman login -u "$CI_REGISTRY_USER" --password-stdin $REGISTRY
+    - podman tag $IMAGE_NAME:$IMAGE_TAG $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+    - podman push $REGISTRY/$IMAGE_NAME:$IMAGE_TAG

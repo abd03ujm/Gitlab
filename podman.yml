@@ -1,0 +1,53 @@
+image: debian:latest  # Use a Debian-based image (or switch to Fedora for better Podman support)
+
+stages:
+  - build
+ # - push
+
+variables:
+  IMAGE_NAME: "docker.hyattdev.com/docker/poc/base-images/alpine"
+  IMAGE_TAG: "18.20.5-3.21v5"
+  REGISTRY: "$CI_REGISTRY"
+  CONTAINER_RUNTIME: "podman"
+  XDG_RUNTIME_DIR: "/run/user/$(id -u)"  # Ensures rootless Podman works
+  ARTIFACTORY_USER: 2501440
+  ARTIFACTORY_URL: "https://docker.hyattdev.com"
+
+before_script:
+
+  - apt-get update && apt-get install -y podman ca-certificates # Install Podman and CA certificates
+  - podman --version  # Check Podman version
+  - cp alpine3.2.0/certs/*.pem /etc/ssl/certs
+  - update-ca-certificates
+  
+
+build:
+  stage: build
+  script:
+    - cd alpine3.2.0
+    - podman build -t $IMAGE_NAME:$IMAGE_TAG .
+    - podman images  # Verify the built image
+    - echo "$ARTIFACTORY_PASSWORD" | podman login -u  "$ARTIFACTORY_USER" --password-stdin $ARTIFACTORY_URL
+    - podman push $IMAGE_NAME:$IMAGE_TAG
+
+    #- podman run --rm $IMAGE_NAME:$IMAGE_TAG
+    - |
+      podman run --rm $IMAGE_NAME:$IMAGE_TAG /bin/sh -c "
+        NODE_VERSION=\$(node --version);
+        ALPINE_VERSION=\$(cat /etc/alpine-release);
+        YARN_VERSION=\$(yarn --version);
+        VERSION_INFO=\$(echo \"
+        {
+          \\\"node_version\\\": \\\"\$NODE_VERSION\\\",
+          \\\"alpine_version\\\": \\\"\$ALPINE_VERSION\\\",
+          \\\"yarn_version\\\": \\\"\$YARN_VERSION\\\"
+        }\" );
+        echo \$VERSION_INFO > GITLAB-POC/alpine3.2.0/version_info.json 
+
+      "
+    
+
+    
+  artifacts:
+    paths:
+      - GITLAB-POC/alpine3.2.0/version_info.json  # Save version    

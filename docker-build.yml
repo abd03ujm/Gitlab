@@ -1,0 +1,36 @@
+.image-build:
+  stage: build
+  image:
+    name: docker.hyattdev.com/docker/poc/base-images/podman:latest  # Use a Debian-based image (or switch to Fedora for better Podman support)
+
+    entrypoint: [""]
+
+
+  script:
+    - ALPINE_VERSION=$(echo $DIR_STRUCTURE | cut -d'/' -f2)
+    - if [ -f "$DIR_STRUCTURE/manifest" ]; then
+        SOFTWARE_VERSION=$(awk '/ENV SOFTWARE_VERSION/{print $3}' $DIR_STRUCTURE/manifest | tr -d '[:space:]' | sed 's|+|plus|g' | sed 's/\//-/g' | sed 's/\./-/g' | sed 's/-$//');
+        BUILD_VERSION=$(awk '/ENV BUILD_VERSION/{print $3}' $DIR_STRUCTURE/manifest | tr -d '[:space:]');
+        SOFTWARE_TYPE=$(awk '/ENV SOFTWARE_TYPE/{print $3}' $DIR_STRUCTURE/manifest | tr -d '[:space:]');
+        echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}";
+        echo "BUILD_VERSION - ${BUILD_VERSION}";
+        FINAL_IMAGE="$IMAGE_NAME:${ALPINE_VERSION}-${SOFTWARE_TYPE}${SOFTWARE_VERSION}-${BUILD_VERSION}";
+      else
+        FINAL_IMAGE="$IMAGE_NAME:${ALPINE_VERSION}";
+      fi    
+    
+    - echo "Building image - $FINAL_IMAGE"
+    - echo "$ARTIFACTORY_PASSWORD" | podman login -u  "$ARTIFACTORY_USER" --password-stdin $ARTIFACTORY_URL
+    - |
+      ls -lrt ${DIR_STRUCTURE}/Dockerfile 
+      cd ${DIR_STRUCTURE}
+      echo "image is $FINAL_IMAGE"
+      podman build -t "$FINAL_IMAGE"  .
+      podman images  # Verify the built image
+      podman push $FINAL_IMAGE
+
+  rules:
+    - changes:
+        - "${DIR_STRUCTURE}/manifest"
+        - "${DIR_STRUCTURE}/Dockerfile"
+ 

@@ -1,10 +1,11 @@
 .image-build:
   stage: build
-  image:
-    name: docker.hyattdev.com/docker/poc/base-images/podman:latest  # Use a Debian-based image (or switch to Fedora for better Podman support)
-
-    entrypoint: [""]
-
+  image: docker:20.10.24-dind  # Use a Debian-based image (or switch to Fedora for better Podman support)
+  services:
+    - name: docker:19.03.12-dind
+      command: ["--host=tcp://docker:2375"]
+  before_script:
+    - unset DOCKER_HOST
 
   script:
     - ALPINE_VERSION=$(echo $DIR_STRUCTURE | cut -d'/' -f2)
@@ -25,9 +26,9 @@
       ls -lrt ${DIR_STRUCTURE}/Dockerfile 
       cd ${DIR_STRUCTURE}
       echo "image is $FINAL_IMAGE"
-      podman build -t "$FINAL_IMAGE"  .
-      podman images  # Verify the built image
-      podman push $FINAL_IMAGE
+      docker build -t "$FINAL_IMAGE"  .
+      docker images  # Verify the built image
+      docker push $FINAL_IMAGE
 
   rules:
     - changes:

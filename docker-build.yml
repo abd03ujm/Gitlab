@@ -45,7 +45,7 @@
 
     - echo "Node.js and npm versions match. Proceeding with push."
     - docker push "$FINAL_IMAGE"
-    - docker push $FINAL_IMAGE
+
 
   rules:
     - changes:

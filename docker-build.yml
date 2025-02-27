@@ -21,19 +21,20 @@
         FINAL_IMAGE="$IMAGE_NAME:${ALPINE_VERSION}";
       fi    
     
-    - echo "Building image - $FINAL_IMAGE"
-    - echo "$ARTIFACTORY_PASSWORD" | podman login -u  "$ARTIFACTORY_USER" --password-stdin $ARTIFACTORY_URL
+      echo "Building image - $FINAL_IMAGE"
+      echo "$ARTIFACTORY_PASSWORD" | podman login -u  "$ARTIFACTORY_USER" --password-stdin $ARTIFACTORY_URL
     - |
       ls -lrt ${DIR_STRUCTURE}/Dockerfile 
       cd ${DIR_STRUCTURE}
       echo "image is $FINAL_IMAGE"
       docker build -t "$FINAL_IMAGE"  .
       docker images  # Verify the built image
-    - VERSION_INFO=$(docker run --rm "$FINAL_IMAGE" sh -c 'echo "NODE_VERSION=$(node -v | sed 's/v//')"; echo "NPM_VERSION=$(npm -v)"')
-    - eval "$VERSION_INFO"
+    - |
+      VERSION_INFO=$(docker run --rm "$FINAL_IMAGE" sh -c 'echo "NODE_VERSION=$(node -v | sed 's/v//')"; echo "NPM_VERSION=$(npm -v)"')
+      eval "$VERSION_INFO"
 
-    - EXPECTED_NODE_VERSION="v18.17.1"
-    - EXPECTED_NPM_VERSION="9.6.7"
+      EXPECTED_NODE_VERSION="v18.17.1"
+      EXPECTED_NPM_VERSION="9.6.7"
     
     - |
       if [ "$NODE_VERSION" != "$EXPECTED_NODE_VERSION" ] || [ "$NPM_VERSION" != "$EXPECTED_NPM_VERSION" ]; then
@@ -43,8 +44,8 @@
         exit 1
       fi
 
-    - echo "Node.js and npm versions match. Proceeding with push."
-    - docker push "$FINAL_IMAGE"
+      echo "Node.js and npm versions match. Proceeding with push."
+      docker push "$FINAL_IMAGE"
 
 
   rules:

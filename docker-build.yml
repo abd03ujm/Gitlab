@@ -9,7 +9,8 @@
 
   script:
     - ALPINE_VERSION=$(echo $DIR_STRUCTURE | cut -d'/' -f2)
-    - if [ -f "$DIR_STRUCTURE/manifest" ]; then
+    - |
+      if [ -f "$DIR_STRUCTURE/manifest" ]; then
         SOFTWARE_VERSION=$(awk '/ENV SOFTWARE_VERSION/{print $3}' $DIR_STRUCTURE/manifest | tr -d '[:space:]' | sed 's|+|plus|g' | sed 's/\//-/g' | sed 's/\./-/g' | sed 's/-$//');
         BUILD_VERSION=$(awk '/ENV BUILD_VERSION/{print $3}' $DIR_STRUCTURE/manifest | tr -d '[:space:]');
         SOFTWARE_TYPE=$(awk '/ENV SOFTWARE_TYPE/{print $3}' $DIR_STRUCTURE/manifest | tr -d '[:space:]');
@@ -28,7 +29,23 @@
       echo "image is $FINAL_IMAGE"
       docker build -t "$FINAL_IMAGE"  .
       docker images  # Verify the built image
-      docker push $FINAL_IMAGE
+    - VERSION_INFO=$(docker run --rm "$FINAL_IMAGE" sh -c 'echo "NODE_VERSION=$(node -v | sed "s/v//")"; echo "NPM_VERSION=$(npm -v)"')
+    - eval "$VERSION_INFO"
+
+    - EXPECTED_NODE_VERSION="v18.17.1"
+    - EXPECTED_NPM_VERSION="9.6.7"
+    
+    - |
+      if [ "$NODE_VERSION" != "$EXPECTED_NODE_VERSION" ] || [ "$NPM_VERSION" != "$EXPECTED_NPM_VERSION" ]; then
+        echo "Node.js or npm version does not match!"
+        echo "Expected Node =  $EXPECTED_NODE_VERSION, Found = $NODE_VERSION"
+        echo "Expected npm = $EXPECTED_NPM_VERSION, Found = $NPM_VERSION"
+        exit 1
+      fi
+
+    - echo "Node.js and npm versions match. Proceeding with push."
+    - docker push "$FINAL_IMAGE"
+    - docker push $FINAL_IMAGE
 
   rules:
     - changes:

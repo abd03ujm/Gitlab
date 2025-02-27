@@ -32,6 +32,8 @@
     - |
       VERSION_INFO=$(docker run --rm "$FINAL_IMAGE" sh -c 'echo "NODE_VERSION=$(node -v | sed 's/v//')"; echo "NPM_VERSION=$(npm -v)"')
       eval "$VERSION_INFO"
+      echo "$NODE_VERSION"
+      echo "$NPM_VERSION"
 
       EXPECTED_NODE_VERSION="v18.17.1"
       EXPECTED_NPM_VERSION="9.6.7"

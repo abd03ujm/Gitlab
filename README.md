@@ -62,3 +62,12 @@ runners:
                   values = ["true"]
 
 ```
+
+```bash
+curl https://releases.rancher.com/install-docker/25.0.5.sh | sh
+
+systemctl enable docker
+
+systemctl start docker
+
+```

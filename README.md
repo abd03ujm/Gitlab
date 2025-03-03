@@ -42,24 +42,10 @@ runners:
             name = "docker-socket"
             mount_path = "/var/run/docker.sock"
             host_path = "/var/run/docker.sock"
-        # Assign runner to a specific node
+        # Corrected node_selector syntax
         [runners.kubernetes.node_selector]
-          gitlab-runner: "true"
-        # Allow toleration for tainted nodes
-        [[runners.kubernetes.tolerations]]
-          key = "dedicated"
-          operator = "Equal"
-          value = "gitlab-runner"
-          effect = "NoSchedule"
-        # Use node affinity for more flexibility
-        [runners.kubernetes.affinity]
-          [runners.kubernetes.affinity.node_affinity]
-            [runners.kubernetes.affinity.node_affinity.required_during_scheduling_ignored_during_execution]
-              [[runners.kubernetes.affinity.node_affinity.required_during_scheduling_ignored_during_execution.node_selector_terms]]
-                [[runners.kubernetes.affinity.node_affinity.required_during_scheduling_ignored_during_execution.node_selector_terms.match_expressions]]
-                  key = "gitlab-runner"
-                  operator = "In"
-                  values = ["true"]
+          "gitlab-runner" = "true"
+
 
 ```
 

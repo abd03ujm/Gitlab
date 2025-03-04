@@ -57,3 +57,10 @@ systemctl enable docker
 systemctl start docker
 
 ```
+
+
+
+# Get Java version 
+```bash
+java -version 2>&1 | grep -oP '(?<=version ")([^"]+)'
+```

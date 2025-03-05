@@ -64,3 +64,11 @@ systemctl start docker
 ```bash
 java -version 2>&1 | grep -oP '(?<=version ")([^"]+)'
 ```
+
+
+GIT Repo Migration steps
+1- create new project and clone it. for exmample repo name is: new-repo
+2- in old-rep, run these commands:
+   1- rm -rf .git
+   2- cp -r * new-repo/     (* old-rep path     and mew-rep is new-repo path
+   

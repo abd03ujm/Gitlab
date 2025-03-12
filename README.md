@@ -1,3 +1,28 @@
+************START ************
+Q1 - As for now, if I have a non-default branch, with changes – will that also trigger the pipeline and publish the images to docker registry?
+I think in common practice, we may want to lockdown the publishing to only default branch or “protected branch”?
+If we go with this model, we’d ask all changes submitted via MR to default branch(or protected branch? Maybe we don’t need this for docker pipelines).
+ 
+Q2 - Also, the current image build and image publish are both in the build job. Do we plan to separate them? Or can we separate them into two stages? For item 1, if I submit a change – will that trigger a “branch pipeline” just do the build to make sure the updated repo is buildable?
+ 
+Q3 - I am not very sure how the “publish permission” got set – seems currently we are using your personal account? I long term, will that be extracted as”docker registry user” and “docker registry password”, and set in the group level(like digital product or even Hyatt?)
+ 
+Q4 - ARTIFACTORY_URL and IMAGE_PATH are over lapping.
+I think our target may be on artifactory but it might be any docker registry? So maybe name as something like “docker registry url” is better?
+From the documentation, the sections are named as
+[HOST[:PORT]/]NAMESPACE/REPOSITORY[:TAG]
+So, the “host:port” is docker registry,
+  Namespace/repository, maybe we can put thgether as “docker_repository”?
+  Then tag is the part after “:”?
+This is not big problem – just my 2 cents.
+
+*****************END*************
+
+
+
+
+
+
 ```bash
 kubectl create secret docker-registry my-docker-secret \
   --docker-server=<REGISTRY_URL> \

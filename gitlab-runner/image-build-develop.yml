@@ -1,0 +1,96 @@
+.image-build-develop:
+  stage: build
+  image:
+    name: docker.hyattdev.com/docker/poc/base-images/podman:v1  # Use a Debian-based image (or switch to Fedora for better Podman support)
+    entrypoint: [""]
+
+  script:
+    # Step 1: Parse manifest to extract version details
+    - |
+      if [ -f "$DIR_STRUCTURE/manifest" ]; then
+        SOFTWARE_VERSION=$(awk '/SOFTWARE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}"
+        echo "BUILD_VERSION - ${BUILD_VERSION}"
+        FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+      else
+        EXIT 1
+      fi  
+      echo "tagging image"  
+      if 
+      echo "Building image - $FINAL_IMAGE"
+
+    # Step 2: Build the image
+    - |
+      ls -lrt ${DIR_STRUCTURE}/Dockerfile 
+      cd ${DIR_STRUCTURE}
+      echo "Building image: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+      podman build -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" .
+      podman images  # List all images to ensure it's built successfully
+
+    # Step 3: Run the container and capture version info  
+    - |
+      VERSION_INFO=$(podman run --rm "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" sh -c '
+        JAVA_VER=$(java -version 2>&1 | head -n 1 | awk -F "\"" "{print \$2}");
+        ALPINE_VER=$(cat /etc/alpine-release);
+        echo "JAVA_VER=${JAVA_VER}";
+        echo "ALPINE_VER=${ALPINE_VER}";
+      ')
+
+      # Ensure that the variables are correctly set by echoing them
+      echo "$VERSION_INFO"
+
+      # Evaluate the version information into variables
+      eval "$VERSION_INFO"
+
+      # Output the Java and Alpine versions
+      echo "JAVA_VER: $JAVA_VER"
+      echo "ALPINE_VER: $ALPINE_VER"
+
+      # Set the expected versions for comparison
+      EXPECTED_ALPINE_VERSION="${ALPINE_VERSION}"
+      EXPECTED_JAVA_VERSION="${SOFTWARE_VERSION}"
+
+    - |
+      # Compare the expected versions with the actual ones
+      if [ "$JAVA_VER" != "$EXPECTED_JAVA_VERSION" ] || [ "$ALPINE_VER" != "$EXPECTED_ALPINE_VERSION" ]; then
+        echo "Expected versions do not match!"
+        exit 1
+      fi
+
+      echo "Expected versions match. Proceeding with push."
+
+    # Step 5: Login to the registry
+    - |
+      echo "Logging into GitLab registry"
+      echo "$CI_REGISTRY_PASSWORD" | podman login -u "$CI_REGISTRY_USER" --password-stdin reg-gitlab.hyattdev.com:5556
+      echo "Podman login exit status: $?"  # Check login status
+
+    # Step 6: Push the image to GitLab registry
+    - |
+      echo "Pushing image to GitLab registry..."
+      podman push "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+      echo "Push exit status: $?"
+
+    # Step 8: Save version info to a file and process it into JSON
+    - |
+      # Save the version info to a file and generate the versions.json file
+      echo "$VERSION_INFO" > version_info.txt
+      cat version_info.txt
+      echo $VERSION_INFO
+      pwd
+      ls -lrth
+      awk -F'=| ' '{ for (i=1; i<=NF; i+=2) printf "  \"%s\": \"%s\",\n", tolower($i), $(i+1) }' version_info.txt | sed '$ s/,$//' | awk 'BEGIN {print "{"} {print} END {print "}"}' > $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
+
+  artifacts:
+    paths:
+      - $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
+    expire_in: 1 week
+
+  rules:
+    - changes:
+        - "${DIR_STRUCTURE}/manifest"
+        - "${DIR_STRUCTURE}/Dockerfile"
+
+

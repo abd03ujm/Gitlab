@@ -1,3 +1,20 @@
+49
+Copying blob sha256:a2a531a2f81e30102b8590328ef6699868b179bb6597611c373489745365fd4d
+50
+Copying blob sha256:bd9ddc54bea929a22b334e73e026d4136e5b73f5cc29942896c72e4ece69b13d
+51
+Copying config sha256:1277a65bdddb9a7ba850aef40842ff5eb62c83b697d73354058604e115c23961
+52
+Writing manifest to image destination
+53
+1277a65bdddb9a7ba850aef40842ff5eb62c83b697d73354058604e115c23961
+54
+reg-gitlab.hyattdev.com:5556/hyatt/digital-product/docker-images/alpine-java:1.8.0_442-54a9e544 
+55
+Error: normalizing name "": normalizing name "": repository name must have at least one component
+
+
+
 ************START ************
 Q1 - As for now, if I have a non-default branch, with changes – will that also trigger the pipeline and publish the images to docker registry?
 I think in common practice, we may want to lockdown the publishing to only default branch or “protected branch”?

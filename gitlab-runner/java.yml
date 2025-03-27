@@ -17,6 +17,7 @@ workflow:
         ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
         BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
         RUN_TIME=$(awk '/RUN_TIME/{print $2}' $DIR_STRUCTURE/manifest)
+        SOFTWARE_TYPE=$(awk '/SOFTWARE_TYPE/{print $2}' $DIR_STRUCTURE/manifest)
         echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}"
         echo "BUILD_VERSION - ${BUILD_VERSION}" 
       else
@@ -25,10 +26,10 @@ workflow:
 
     - |
       echo "Image Taging based on $RUN_TIME"
-      if [ -z "$RUN_TIME" ]; then
+      if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
         FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
         echo "Building image - $FINAL_IMAGE"
-      elif [ -z "$BUILD_VERSION" ]; then
+      elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
         FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
         echo "JFROG_if - Building image - $FINAL_IMAGE"  
       else
@@ -41,13 +42,13 @@ workflow:
     - |
       ls -lrt ${DIR_STRUCTURE}/Dockerfile 
       cd ${DIR_STRUCTURE}
-      echo "Building image: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
-      podman build -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" .
+      echo "Building image: ${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}"
+      podman build -t "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" .
       podman images  # List all images to ensure it's built successfully
 
     # Step 3: Run the container and capture version info  
     - |
-      VERSION_INFO=$(podman run --rm "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" sh -c '
+      VERSION_INFO=$(podman run --rm "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" sh -c '
         JAVA_VER=$(java -version 2>&1 | head -n 1 | awk -F "\"" "{print \$2}");
         ALPINE_VER=$(cat /etc/alpine-release);
         echo "JAVA_VER=${JAVA_VER}";
@@ -86,24 +87,24 @@ workflow:
     # Step 6: Push the image to GitLab registry
     - |
       echo "Pushing image to GitLab registry..."
-      podman push "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+      podman push "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}"
       echo "Push exit status: $?"
       echo "image tag for jfrog is - $FINAL_IMAGE"
 
-    # Step 8: Save version info to a file and process it into JSON
-    - |
-      # Save the version info to a file and generate the versions.json file
-      echo "$VERSION_INFO" > version_info.txt
-      cat version_info.txt
-      echo $VERSION_INFO
-      pwd
-      ls -lrth
-      awk -F'=| ' '{ for (i=1; i<=NF; i+=2) printf "  \"%s\": \"%s\",\n", tolower($i), $(i+1) }' version_info.txt | sed '$ s/,$//' | awk 'BEGIN {print "{"} {print} END {print "}"}' > $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
+  #   # Step 8: Save version info to a file and process it into JSON
+  #   - |
+  #     # Save the version info to a file and generate the versions.json file
+  #     echo "$VERSION_INFO" > version_info.txt
+  #     cat version_info.txt
+  #     echo $VERSION_INFO
+  #     pwd
+  #     ls -lrth
+  #     awk -F'=| ' '{ for (i=1; i<=NF; i+=2) printf "  \"%s\": \"%s\",\n", tolower($i), $(i+1) }' version_info.txt | sed '$ s/,$//' | awk 'BEGIN {print "{"} {print} END {print "}"}' > $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
 
-  artifacts:
-    paths:
-      - $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
-    expire_in: 1 week
+  # artifacts:
+  #   paths:
+  #     - $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
+  #   expire_in: 1 week
 
   rules:
     - changes:

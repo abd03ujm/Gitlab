@@ -1,0 +1,303 @@
+stages:
+  - initialize
+  - build
+  - test
+  - dast
+  - deploy
+  - release
+
+variables:
+  AUTO_BUILD_IMAGE_VERSION: 'v1.21.0'
+  PODMAN_IMAGE: 'docker.hyattdev.com/docker/alpine-podman:5.3.2_12'
+  REGISTRY: "$CI_REGISTRY"
+  ARTIFACTORY_USER: jenkins_upload
+  ARTIFACTORY_REGISTRY: docker.hyattdev.com
+  ARTIFACTORY_PROJECT: docker
+  ARTIFACTORY_REPOSITORY: "$ARTIFACTORY_REGISTRY/$ARTIFACTORY_PROJECT"
+  ARTIFACTORY_URL: "https://$ARTIFACTORY_REGISTRY"
+  PODMAN_IGNORE_CGROUPSV1_WARNING: "true"
+
+initialize:
+  stage: initialize
+  script:
+    - echo "In initialize 'script' -"
+
+build:
+  image: "$PODMAN_IMAGE"
+  stage: build
+  resource_group: build
+  environment:
+    name: int
+    deployment_tier: development
+  before_script: |
+    set -e
+    if ! [ -z "$TRACE" ]; then
+      set -x
+    fi
+
+    podman network create podman1
+    sed -ie 's/\#default_network = .*/default_network = "podman1"/g' /etc/containers/containers.conf
+    podman network reload -a
+  rules:
+  - if: '$BUILD_DISABLED'
+    when: never
+  - if: '$AUTO_DEVOPS_PLATFORM_TARGET == "EC2"'
+    when: never
+  - if: '($CI_COMMIT_TAG || $CI_COMMIT_BRANCH)'
+  - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_PROTECTED == "true"'
+
+  script: |
+    #env
+ 
+    # CI_APPLICATION_TAG 148.895cf245
+    # CI_REGISTRY_IMAGE reg-gitlab.hyattdev.com:5556/hyatt/docker/alpine-bob
+
+    echo "In build 'before_script' -"
+    export HYATT_IMAGE_TAG=$CI_PIPELINE_IID.$CI_COMMIT_SHORT_SHA
+    echo "Image Tag - $HYATT_IMAGE_TAG"
+    export CI_APPLICATION_TAG=$HYATT_IMAGE_TAG
+    export BRANCH_SLUG=`echo -n $CI_COMMIT_REF_SLUG | cut -c 1-20`
+    AUTO_DEVOPS_BUILD_IMAGE_EXTRA_ARGS="--label git.branch=$BRANCH_SLUG --label git.revision=$CI_COMMIT_SHA --label source.sha=$CI_COMMIT_SHORT_SHA --label release.name=$CI_PROJECT_NAME --build-arg image.version=$HYATT_IMAGE_TAG"
+
+    export CI_APPLICATION_REPOSITORY=$ARTIFACTORY_REPOSITORY/$CI_PROJECT_NAME
+
+    if [[ -z "$CI_COMMIT_TAG" ]]; then
+      export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG}
+      export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_SHA}
+    else
+      export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE}
+      export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_TAG}
+    fi
+
+    image_found=""
+    docker_find_image_by_revision() {
+      repo=$1
+      sum=$2
+      path=$3
+
+      # Conversion to JSON
+      json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+          {"@docker.label.git.revision":{ "$eq" : "%s" }},
+          {"path": { "$match": "*%s/*" }})
+          .sort({ "$desc": ["created"]})
+          .limit(1)' "$repo" "$sum" "$path" )
+
+      if ! [ -z "$TRACE" ]; then
+        echo $json_string
+      fi
+
+      token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+      response=$(curl -s -H "Content-Type: text/plain"  \
+          -X POST -d "$json_string" \
+          -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+
+      match=$(echo $response | jq '.results[0].path')
+      
+      if [[ "$match" == "null" ]]; then
+        image_found="0"
+      else
+        image_found="1"
+      fi
+    }
+
+    docker_find_image_by_revision "dockerv2-local" $CI_COMMIT_SHA "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME"
+
+    if [ $image_found -eq 1 ]; then
+        # exists
+        echo "docker image with this git sha already exists; not building"
+      else
+
+        docker build --network=host -t $CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG $AUTO_DEVOPS_BUILD_IMAGE_EXTRA_ARGS .
+        docker images
+
+        filter_docker_warning() {
+          grep -E -v "^WARNING! Your password will be stored unencrypted in |^Configure a credential helper to remove this warning. See|^https://docs.docker.com/engine/reference/commandline/login/#credentials-store|Failed to decode the keys" || true
+        }
+
+        docker_login_filtered() {
+          # $1 - username, $2 - password, $3 - registry
+          # this filters the stderr of the `docker login`, without merging stdout and stderr together
+          { echo "$2" | docker login -u "$1" --password-stdin "$3" 2>&1 1>&3 | filter_docker_warning 1>&2; } 3>&1  
+        }
+        
+        echo "Logging in to Artifactory Registry ..."
+        #docker_login_filtered "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+        token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+        docker_login_filtered "$ARTIFACTORY_USER" "$token" "$ARTIFACTORY_REGISTRY"
+
+        docker push $CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG
+    fi
+
+
+security:
+  stage: test
+  trigger:
+    include:
+      - project: 'hyatt/Pipelines/docker-compliance-pipeline'
+        file: '/.security-ci.yml'
+    strategy: depend
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+    - when: never
+
+include:
+  - project: 'hyatt/Pipelines/docker-compliance-pipeline'
+    file: '/.security-ci.yml'
+    rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+  # - template: Jobs/Build.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab/blob/master/lib/gitlab/ci/templates/Jobs/Build.gitlab-ci.yml
+  - project: '$CI_PROJECT_PATH'
+    file: '$CI_CONFIG_PATH'
+    ref: '$CI_COMMIT_REF_NAME' # Must be defined or MR pipelines always use the use default branch
+
+release:
+  stage: release
+  resource_group: production
+  environment:
+    name: production
+    deployment_tier: production
+  image: "$PODMAN_IMAGE"
+  when: manual
+  rules:
+  - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_PROTECTED == "true"'
+    when: manual
+  - when: never
+  # - *deploy_rules
+  script: |-
+    set -e
+    if ! [ -z "$TRACE" ]; then
+      set -x
+    fi
+
+    filter_docker_warning() {
+      grep -E -v "^WARNING! Your password will be stored unencrypted in |^Configure a credential helper to remove this warning. See|^https://docs.docker.com/engine/reference/commandline/login/#credentials-store|Failed to decode the keys" || true
+    }
+
+    docker_login_filtered() {
+       # $1 - username, $2 - password, $3 - registry
+       # this filters the stderr of the `docker login`, without merging stdout and stderr together
+      { echo "$2" | docker login -u "$1" --password-stdin "$3" 2>&1 1>&3 | filter_docker_warning 1>&2; } 3>&1  
+     }
+
+    export HYATT_IMAGE_TAG=$CI_PIPELINE_IID.$CI_COMMIT_SHORT_SHA
+    echo "Image Tag - $HYATT_IMAGE_TAG"
+    export CI_APPLICATION_TAG=$HYATT_IMAGE_TAG
+
+    export CI_APPLICATION_REPOSITORY=$ARTIFACTORY_REPOSITORY/$CI_PROJECT_NAME
+
+    if [[ -z "$CI_COMMIT_TAG" ]]; then
+      export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG}
+      export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_SHA}
+    else
+      export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE}
+      export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_TAG}
+    fi
+
+    #echo "CI_APPLICATION_REPOSITORY ${CI_APPLICATION_REPOSITORY}"
+    #echo "CI_APPLICATION_TAG ${CI_APPLICATION_TAG}"
+    #echo "CI_REGISTRY_IMAGE ${CI_REGISTRY_IMAGE}"
+    #echo "FINAL_IMAGE_TAG ${FINAL_IMAGE_TAG}"
+
+    echo "Logging in to Artifactory Registry..."
+    # docker_login_filtered "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+    docker_login_filtered "$ARTIFACTORY_USER" "$token" "$ARTIFACTORY_REGISTRY"
+
+    image_found=""
+
+    docker_find_image_by_tag() {
+      
+      repo=$1
+      path=$2
+
+      # Conversion to JSON
+      json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+          {"path": { "$match": "%s" }})
+          .sort({ "$desc": ["created"]})
+          .limit(1)' "$repo" "$path" )
+
+      if ! [ -z "$TRACE" ]; then
+        echo $json_string
+      fi
+
+      token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+      response=$(curl -s -H "Content-Type: text/plain"  \
+          -X POST -d "$json_string" \
+          -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+
+      match=$(echo $response | jq '.results[0].path')
+      
+      if [[ "$match" == "null" ]]; then
+        image_found="0"
+      else
+        image_found="1"
+      fi
+
+    }
+    
+    # promote a docker image to dockerv2-prod
+    docker_promote() {
+       # $1 - sourcetag, $2 - targetTag, 
+
+      targetRepo=dockerv2-prod
+      dockerRepo=$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME
+      sourceTag=$1
+      targetTag=$2
+
+      # Conversion to JSON
+      json_string=$(printf '{
+          "targetRepo": "%s",
+          "dockerRepository": "%s",
+          "tag": "%s",
+          "targetTag": "%s",
+          "copy": "false"
+      }' "$targetRepo" "$dockerRepo" "$sourceTag" "$targetTag" )
+
+      token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+      curl -s -H "Content-Type: application/json"  \
+          -X POST -d "$json_string" \
+          -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/docker/dockerv2-local/v2/promote"
+    }
+
+    docker pull --quiet $CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG
+
+    if [[ "$FINAL_IMAGE_TAG" == *","* ]]; then
+      echo $FINAL_IMAGE_TAG | tr ',' '\n' | while IFS= read -r TAG; do
+
+        docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME/$TAG"
+        
+        if [ $image_found -eq 1 ]; then
+          # exists
+          echo "docker image with this tag already exists; not pushing tagged image"
+        else
+          echo "docker tag $CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG $CI_APPLICATION_REPOSITORY:$TAG"
+          docker tag $CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG $CI_APPLICATION_REPOSITORY:$TAG
+          docker push $CI_APPLICATION_REPOSITORY:$TAG
+
+          docker_promote $CI_APPLICATION_TAG $TAG
+        fi
+      done
+    else
+
+      docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME/$FINAL_IMAGE_TAG"
+
+      if [ $image_found -eq 1 ]; then
+        # exists
+        echo "docker image with this tag already exists; not pushing tagged image"
+      else
+        echo "docker tag $CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG $CI_APPLICATION_REPOSITORY:$FINAL_IMAGE_TAG"
+        docker tag $CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG $CI_APPLICATION_REPOSITORY:$FINAL_IMAGE_TAG
+        docker push $CI_APPLICATION_REPOSITORY:$FINAL_IMAGE_TAG
+
+        docker_promote $CI_APPLICATION_TAG $FINAL_IMAGE_TAG
+
+      fi
+    fi
+
+ 
+
+

@@ -1,0 +1,24 @@
+$ docker_find_image_by_tag() { # collapsed multi-line command
+$ echo "Pulling source image: $FINAL_IMAGE" # collapsed multi-line command
+Pulling source image: docker.hyattdev.com/poc/alpine-node:18.20.7
+ba956cb8b3844333dcebc880549b1f48b4ac8cd709d92d78d42d464148a050cc
+Final Image Tag: jay-v01
+jq: parse error: Invalid numeric literal at line 1, column 7
+sh: AQL Query: {
+    "repo": "dockerv2-prod",
+    "path": "docker/alpine-node/jay-v01",
+    "created": "desc"
+  }
+AQL Response: Failed to parse query: {
+    "repo": "dockerv2-prod",
+    "path": "docker/alpine-node/jay-v01",
+    "created": "desc"
+  }, it looks like there is syntax error near the following sub-query: {
+    "repo": "dockerv2-prod",
+    "path": "docker/alpine-node/jay-v01",
+    "created": "desc"
+  }
+0: out of range
+Tagging and pushing image with tag: jay-v01
+Error: normalizing name ":jay-v01": normalizing name ":jay-v01": invalid reference format
+Cleaning up project directory and file based variables

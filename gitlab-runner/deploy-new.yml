@@ -18,6 +18,14 @@ variables:
     # entrypoint: [""]
 
   script:
+  - |
+    check() {
+      if [ $? -ne 0 ]; then
+        echo "Error: $?"
+        exit 1
+      fi
+    }
+
     # Step 1: Extract version details from manifest
     - |
       if [ -f "$DIR_STRUCTURE/manifest" ]; then
@@ -126,6 +134,7 @@ variables:
     - |
       echo "Pulling source image: $FINAL_IMAGE"
       docker pull --quiet "$FINAL_IMAGE"
+      check
 
       CI_APPLICATION_REPOSITORY="$ARTIFACTORY_REPOSITORY/$PROJECT_NAME"
 
@@ -140,15 +149,20 @@ variables:
             echo "step-1"
             token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
             docker login docker.hyattdev.com  -u jenkins_upload -p $token
+            check
+
             echo "Tagging and pushing image with tag: $INDIVIDUAL_TAG"
             echo docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
             docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+            check
 
             echo docker push "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
             docker push "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+            check
 
             echo docker_promote "$INDIVIDUAL_TAG" "$INDIVIDUAL_TAG"
             docker_promote "$INDIVIDUAL_TAG" "$INDIVIDUAL_TAG"
+            check
             docker images
           fi
         done
@@ -162,15 +176,19 @@ variables:
           echo "step-2"
           token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
           docker login docker.hyattdev.com  -u jenkins_upload -p $token
+          check
           echo "Tagging and pushing image with tag: $INDIVIDUAL_TAG"
           echo docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
           docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+          check
 
           echo docker push "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
           docker push "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+          check
 
           echo docker_promote "$INDIVIDUAL_TAG" "$INDIVIDUAL_TAG"
           docker_promote "$INDIVIDUAL_TAG" "$INDIVIDUAL_TAG"
+          check
           docker images
         fi
       fi

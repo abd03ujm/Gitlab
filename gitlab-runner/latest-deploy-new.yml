@@ -1,0 +1,159 @@
+variables:
+  AUTO_BUILD_IMAGE_VERSION: 'v1.21.0'
+  PODMAN_IMAGE: 'docker.hyattdev.com/docker/alpine-podman:5.3.2_12'
+  REGISTRY: "$CI_REGISTRY"
+  ARTIFACTORY_USER: jenkins_upload
+  ARTIFACTORY_REGISTRY: docker.hyattdev.com
+  ARTIFACTORY_PROJECT: docker
+  ARTIFACTORY_REPOSITORY: "$ARTIFACTORY_REGISTRY/$ARTIFACTORY_PROJECT"
+  ARTIFACTORY_URL: "https://$ARTIFACTORY_REGISTRY"
+  PODMAN_IGNORE_CGROUPSV1_WARNING: "true"
+  FINAL_IMAGE_TAG: $RELEASE_TAG
+
+.image-deploy:
+  stage: deploy
+  image:
+    name: "$PODMAN_IMAGE"
+    entrypoint: [""]
+
+  script:
+    # Step 1: Extract version details from manifest
+    - |
+      if [ -f "$DIR_STRUCTURE/manifest" ]; then
+        SOFTWARE_VERSION=$(awk '/SOFTWARE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        RUN_TIME=$(awk '/RUN_TIME/{print $2}' $DIR_STRUCTURE/manifest)
+        SOFTWARE_TYPE=$(awk '/SOFTWARE_TYPE/{print $2}' $DIR_STRUCTURE/manifest)
+        echo "SOFTWARE_VERSION: ${SOFTWARE_VERSION}"
+        echo "BUILD_VERSION: ${BUILD_VERSION}"
+      else
+        echo "Manifest file not found! Exiting..."
+        exit 1
+      fi  
+
+    # Step 2: Define FINAL_IMAGE & TAG based on SOFTWARE_TYPE
+    - |
+      if [ "$SOFTWARE_TYPE" = "node" ]; then
+        echo "Setting image tag based on BUILD_VERSION..."
+        if [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+          TAG="${SOFTWARE_VERSION}"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+        fi
+        echo "FINAL_IMAGE: $FINAL_IMAGE"
+      elif [ "$SOFTWARE_TYPE" = "java" ]; then
+        echo "Setting image tag based on RUN_TIME..."
+        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+          TAG="$RUN_TIME-${SOFTWARE_VERSION}"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          TAG="$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+        fi
+        echo "FINAL_IMAGE: $FINAL_IMAGE"
+      fi
+
+    # Step 3: Define image promotion functions
+    - |
+      docker_find_image_by_tag() {
+        repo=$1
+        path=$2
+
+        # Fixing AQL query formatting
+        json_string='{
+          "repo": "'"$repo"'",
+          "path": "'"$path"'",
+          "created": "desc"
+        }'
+
+        echo "AQL Query: $json_string"
+        token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+        response=$(curl -s -H "Content-Type: text/plain" \
+          -u "$ARTIFACTORY_USER:$token" \
+          -X POST -d "$json_string" \
+          "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+
+        echo "AQL Response: $response"
+
+        match=$(echo "$response" | jq -r '.results[0].path // empty')
+
+        if [[ -z "$match" ]]; then
+          echo "0"  # Image not found
+        else
+          echo "1"  # Image found
+        fi
+      }
+
+      docker_promote() {
+        sourceTag=$1
+        targetTag=$2
+        targetRepo="dockerv2-prod"
+        dockerRepo="$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME"
+
+        json_string='{
+          "targetRepo": "'"$targetRepo"'",
+          "dockerRepository": "'"$dockerRepo"'",
+          "tag": "'"$sourceTag"'",
+          "targetTag": "'"$targetTag"'",
+          "copy": "false"
+        }'
+
+        token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+        curl -s -H "Content-Type: application/json" \
+          -u "$ARTIFACTORY_USER:$token" \
+          -X POST -d "$json_string" \
+          "https://artifacts.hyattdev.com/artifactory/api/docker/dockerv2-local/v2/promote"
+      }
+
+    # Step 4: Pull and Promote Image
+    - |
+      echo "Pulling source image: $FINAL_IMAGE"
+      docker pull --quiet "$FINAL_IMAGE"
+
+      # Debugging the image tag
+      echo "Final Image Tag: $FINAL_IMAGE_TAG"
+
+      if [[ "$FINAL_IMAGE_TAG" == *","* ]]; then
+        echo "$FINAL_IMAGE_TAG" | tr ',' '\n' | while IFS= read -r TAG; do
+          found=$(docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME/$FINAL_IMAGE_TAG")
+
+          if [[ "$found" -eq 1 ]]; then
+            echo "Docker image with tag '$TAG' already exists in prod. Skipping push."
+          else
+            echo "Tagging and pushing image with tag: $TAG"
+            # Ensure no invalid reference format
+            docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$TAG"
+            docker push "$CI_APPLICATION_REPOSITORY:$TAG"
+
+            docker_promote "$TAG" "$FINAL_IMAGE_TAG"
+          fi
+        done
+      else
+        found=$(docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME/$FINAL_IMAGE_TAG")
+
+        if [[ "$found" -eq 1 ]]; then
+          echo "Docker image with tag '$FINAL_IMAGE_TAG' already exists in prod. Skipping push."
+        else
+          echo "Tagging and pushing image with tag: $FINAL_IMAGE_TAG"
+          docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$FINAL_IMAGE_TAG"
+          docker push "$CI_APPLICATION_REPOSITORY:$FINAL_IMAGE_TAG"
+
+          docker_promote "$FINAL_IMAGE_TAG" "$FINAL_IMAGE_TAG"
+        fi
+      fi
+
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "FT-develop"'
+      changes:
+        - "${DIR_STRUCTURE}/manifest"
+        - "${DIR_STRUCTURE}/Dockerfile"
+      when: manual
+    - when: never

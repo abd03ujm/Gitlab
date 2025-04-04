@@ -5,16 +5,17 @@ variables:
   ARTIFACTORY_USER: jenkins_upload
   ARTIFACTORY_REGISTRY: docker.hyattdev.com
   ARTIFACTORY_PROJECT: docker
+  PROJECT_NAME: "alpine-jay"
   ARTIFACTORY_REPOSITORY: "$ARTIFACTORY_REGISTRY/$ARTIFACTORY_PROJECT"
   ARTIFACTORY_URL: "https://$ARTIFACTORY_REGISTRY"
   PODMAN_IGNORE_CGROUPSV1_WARNING: "true"
-  FINAL_IMAGE_TAG: $realease_tag
+  INDIVIDUAL_TAG: $RELEASE_TAG
 
 .image-deploy:
   stage: deploy
-  image:
-    name: docker.hyattdev.com/docker/poc/base-images/podman:v1
-    entrypoint: [""]
+  image: "$PODMAN_IMAGE"
+    # name: docker.hyattdev.com/docker/poc/base-images/podman:v1
+    # entrypoint: [""]
 
   script:
     # Step 1: Extract version details from manifest
@@ -62,92 +63,115 @@ variables:
 
     # Step 3: Define image promotion functions
     - |
+      image_found=""
+
       docker_find_image_by_tag() {
+        
         repo=$1
         path=$2
 
-        aql_query=$(cat <<EOF
-items.find({
-  "repo": "$repo",
-  "path": {"\$match": "$path"}
-}).sort({"$desc": ["created"]}).limit(1)
-EOF
-        )
+        # Conversion to JSON
+        json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+            {"path": { "$match": "%s" }})
+            .sort({ "$desc": ["created"]})
+            .limit(1)' "$repo" "$path" )
 
-        echo "AQL Query: $aql_query"
+        if ! [ -z "$TRACE" ]; then
+          echo $json_string
+        fi
+
         token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
 
-        response=$(curl -s -H "Content-Type: text/plain" \
-          -u "$ARTIFACTORY_USER:$token" \
-          -X POST -d "$aql_query" \
-          "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+        response=$(curl -s -H "Content-Type: text/plain"  \
+            -X POST -d "$json_string" \
+            -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
 
-        echo "AQL Response: $response"
-
-        match=$(echo "$response" | jq -r '.results[0].path // empty')
-
-        if [[ -z "$match" ]]; then
-          echo "0"
+        match=$(echo $response | jq '.results[0].path')
+        
+        if [[ "$match" == "null" ]]; then
+          image_found="0"
         else
-          echo "1"
+          image_found="1"
         fi
-      }
 
+      }
+      
+      # promote a docker image to dockerv2-prod
       docker_promote() {
+        # $1 - sourcetag, $2 - targetTag, 
+
+        targetRepo=dockerv2-prod
+        dockerRepo=$ARTIFACTORY_PROJECT/$PROJECT_NAME
         sourceTag=$1
         targetTag=$2
-        targetRepo="dockerv2-prod"
-        dockerRepo="$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME"
 
-        json_string=$(cat <<EOF
-{
-  "targetRepo": "$targetRepo",
-  "dockerRepository": "$dockerRepo",
-  "tag": "$sourceTag",
-  "targetTag": "$targetTag",
-  "copy": "false"
-}
-EOF
-        )
+        # Conversion to JSON
+        json_string=$(printf '{
+            "targetRepo": "%s",
+            "dockerRepository": "%s",
+            "tag": "%s",
+            "targetTag": "%s",
+            "copy": "false"
+        }' "$targetRepo" "$dockerRepo" "$sourceTag" "$targetTag" )
 
         token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
 
-        curl -s -H "Content-Type: application/json" \
-          -u "$ARTIFACTORY_USER:$token" \
-          -X POST -d "$json_string" \
-          "https://artifacts.hyattdev.com/artifactory/api/docker/dockerv2-local/v2/promote"
+        curl -s -H "Content-Type: application/json"  \
+            -X POST -d "$json_string" \
+            -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/docker/dockerv2-local/v2/promote"
       }
+
 
     # Step 4: Pull and Promote Image
     - |
       echo "Pulling source image: $FINAL_IMAGE"
       docker pull --quiet "$FINAL_IMAGE"
 
-      CI_APPLICATION_REPOSITORY="$ARTIFACTORY_REPOSITORY/$CI_PROJECT_NAME"
+      CI_APPLICATION_REPOSITORY="$ARTIFACTORY_REPOSITORY/$PROJECT_NAME"
 
-      if [[ "$FINAL_IMAGE_TAG" == *","* ]]; then
-        echo "$FINAL_IMAGE_TAG" | tr ',' '\n' | while IFS= read -r INDIVIDUAL_TAG; do
-          found=$(docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME/$INDIVIDUAL_TAG")
+      if [[ "$INDIVIDUAL_TAG" == *","* ]]; then
+        echo "$INDIVIDUAL_TAG" | tr ',' '\n' | while IFS= read -r INDIVIDUAL_TAG; do
+          found=$(docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$PROJECT_NAME/$INDIVIDUAL_TAG")
 
           if [[ "$found" -eq 1 ]]; then
             echo "Image with tag '$INDIVIDUAL_TAG' already exists in prod. Skipping."
           else
+            docker images
+            echo "step-1"
+            token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+            docker login docker.hyattdev.com  -u jenkins_upload -p $token
             echo "Tagging and pushing image with tag: $INDIVIDUAL_TAG"
+            echo docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
             docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+
+            echo docker push "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
             docker push "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
-            docker_promote "$TAG" "$INDIVIDUAL_TAG"
+
+            echo docker_promote "$INDIVIDUAL_TAG" "$INDIVIDUAL_TAG"
+            docker_promote "$INDIVIDUAL_TAG" "$INDIVIDUAL_TAG"
+            docker images
           fi
         done
       else
-        found=$(docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME/$FINAL_IMAGE_TAG")
+        found=$(docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$PROJECT_NAME/$INDIVIDUAL_TAG")
 
         if [[ "$found" -eq 1 ]]; then
-          echo "Image with tag '$FINAL_IMAGE_TAG' already exists in prod. Skipping."
+          echo "Image with tag '$INDIVIDUAL_TAG' already exists in prod. Skipping."
         else
-          echo "Tagging and pushing image with tag: $FINAL_IMAGE_TAG"
-          docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$FINAL_IMAGE_TAG"
-          docker push "$CI_APPLICATION_REPOSITORY:$FINAL_IMAGE_TAG"
-          docker_promote "$TAG" "$FINAL_IMAGE_TAG"
+          docker images
+          echo "step-2"
+          token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+          docker login docker.hyattdev.com  -u jenkins_upload -p $token
+          echo "Tagging and pushing image with tag: $INDIVIDUAL_TAG"
+          echo docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+          docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+
+          echo docker push "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+          docker push "$CI_APPLICATION_REPOSITORY:$INDIVIDUAL_TAG"
+
+          echo docker_promote "$INDIVIDUAL_TAG" "$INDIVIDUAL_TAG"
+          docker_promote "$INDIVIDUAL_TAG" "$INDIVIDUAL_TAG"
+          docker images
         fi
       fi
 

@@ -1,3 +1,15 @@
+variables:
+  AUTO_BUILD_IMAGE_VERSION: 'v1.21.0'
+  PODMAN_IMAGE: 'docker.hyattdev.com/docker/alpine-podman:5.3.2_12'
+  REGISTRY: "$CI_REGISTRY"
+  ARTIFACTORY_USER: jenkins_upload
+  ARTIFACTORY_REGISTRY: docker.hyattdev.com
+  ARTIFACTORY_PROJECT: docker
+  ARTIFACTORY_REPOSITORY: "$ARTIFACTORY_REGISTRY/$ARTIFACTORY_PROJECT"
+  ARTIFACTORY_URL: "https://$ARTIFACTORY_REGISTRY"
+  PODMAN_IGNORE_CGROUPSV1_WARNING: "true"
+  FINAL_IMAGE_TAG: $realease_tag
+
 .image-deploy:
   stage: deploy
   image:

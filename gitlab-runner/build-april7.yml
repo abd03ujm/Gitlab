@@ -1,0 +1,247 @@
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH
+variables:
+  AUTO_BUILD_IMAGE_VERSION: 'v1.21.0'
+  PODMAN_IMAGE: 'docker.hyattdev.com/docker/alpine-podman:5.3.2_12'
+  REGISTRY: "$CI_REGISTRY"
+  ARTIFACTORY_USER: jenkins_upload
+  ARTIFACTORY_REGISTRY: docker.hyattdev.com
+  ARTIFACTORY_PROJECT: docker
+  ARTIFACTORY_REPOSITORY: "$ARTIFACTORY_REGISTRY/$ARTIFACTORY_PROJECT"
+  ARTIFACTORY_URL: "https://$ARTIFACTORY_REGISTRY"
+  PODMAN_IGNORE_CGROUPSV1_WARNING: "true"
+stages:
+  - pre-build
+  - build
+.image-build:
+  stage: pre-build
+  image: $PODMAN_IMAGE
+  script:
+    - |
+      if [ -f "$DIR_STRUCTURE/manifest" ]; then
+        SOFTWARE_VERSION=$(awk '/SOFTWARE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        RUN_TIME=$(awk '/RUN_TIME/{print $2}' $DIR_STRUCTURE/manifest)
+        SOFTWARE_TYPE=$(awk '/SOFTWARE_TYPE/{print $2}' $DIR_STRUCTURE/manifest)
+        echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}"
+        echo "BUILD_VERSION - ${BUILD_VERSION}" 
+      else
+        EXIT 1
+      fi  
+
+    - |
+      if [ "$SOFTWARE_TYPE" = "node" ]; then
+
+        echo "Image Taging based on $BUILD_VERSION"
+        if [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        fi
+      elif [ "$SOFTWARE_TYPE" = "java" ]; then
+        echo "Image Taging based on $RUN_TIME"
+        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+          echo "JFROG_if - Building image - $FINAL_IMAGE"  
+        else
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        fi
+      fi
+      
+    - |
+      image_found=""
+      docker_find_image_by_revision() {
+        repo=$1
+        sum=$2
+        path=$3
+
+        # Conversion to JSON
+        json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+            {"@docker.label.git.revision":{ "$eq" : "%s" }},
+            {"path": { "$match": "*%s/*" }})
+            .sort({ "$desc": ["created"]})
+            .limit(1)' "$repo" "$sum" "$path" )
+
+        if ! [ -z "$TRACE" ]; then
+          echo $json_string
+        fi
+
+        token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+        response=$(curl -s -H "Content-Type: text/plain"  \
+            -X POST -d "$json_string" \
+            -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+
+        match=$(echo $response | jq -r '.results[0].path')
+        
+        if [ "$match" == "null" ]; then
+          image_found="0"
+        else
+          image_found="$match"
+        fi
+      }
+
+      docker_find_image_by_revision "dockerv2-local" $TAG "$IMAGE_PATH"
+
+      if [ "$image_found" != "0" ]; then
+          # exists
+          echo "docker image with this git sha already exists; not building"
+          EXIT 1
+      fi
+
+  stage: build
+  image:
+    name: docker.hyattdev.com/docker/poc/base-images/podman:v1  # Use a Debian-based image (or switch to Fedora for better Podman support)
+    entrypoint: [""]
+
+  script:
+    # Step 1: Parse manifest to extract version details
+    - |
+      if [ -f "$DIR_STRUCTURE/manifest" ]; then
+        SOFTWARE_VERSION=$(awk '/SOFTWARE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        YARN_VERSION=$(awk '/YARN_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+        RUN_TIME=$(awk '/RUN_TIME/{print $2}' $DIR_STRUCTURE/manifest)
+        SOFTWARE_TYPE=$(awk '/SOFTWARE_TYPE/{print $2}' $DIR_STRUCTURE/manifest)
+        echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}"
+        echo "BUILD_VERSION - ${BUILD_VERSION}" 
+      else
+        EXIT 1
+      fi  
+
+    - |
+      if [ "$SOFTWARE_TYPE" = "node" ]; then
+
+        echo "Image Taging based on $BUILD_VERSION"
+        if [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        fi
+      elif [ "$SOFTWARE_TYPE" = "java" ]; then
+        echo "Image Taging based on $RUN_TIME"
+        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+          echo "JFROG_if - Building image - $FINAL_IMAGE"  
+        else
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        fi
+      fi  
+    # - |
+    #   if [ -f "$DIR_STRUCTURE/manifest" ]; then
+    #     SOFTWARE_VERSION=$(awk '/SOFTWARE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     YARN_VERSION=$(awk '/YARN_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}"
+    #     echo "BUILD_VERSION - ${BUILD_VERSION}"
+    #     echo "YARN_VERSION - ${YARN_VERSION}"
+    #   else
+    #     EXIT 1  
+    #   fi    
+
+    # - |
+    #   echo "Image Taging based on $BUILD_VERSION"
+    #   if [ -z "$BUILD_VERSION" ]; then
+    #     FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+    #     echo "JFROG_if - Building image - $FINAL_IMAGE"
+    #   else
+    #     FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+    #     echo "JFROG_else - Building image - $FINAL_IMAGE"
+    #   fi  
+
+    # Step 2: Build the image
+    - |
+      ls -lrt ${DIR_STRUCTURE}/Dockerfile
+      cd ${DIR_STRUCTURE}
+      echo "Building image: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+      podman build -t "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" .
+      podman images  # List all images to ensure it's built successfully
+
+    # Step 3: Run the container and capture version info
+    - |
+      VERSION_INFO=$(podman run --rm "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" sh -c '
+        echo "NODE_VER=$(node -v)"
+        echo "NPM_VER=$(npm -v)"
+        echo "YARN_VER=$(yarn -v)"
+        echo "ALPINE_VER=$(cat /etc/alpine-release)"
+      ')
+
+      # Extract individual versions from the VERSION_INFO output
+      NODE_VER=$(echo "$VERSION_INFO" | grep -oP 'NODE_VER=\K.+' | sed 's/^v//')
+      NPM_VER=$(echo "$VERSION_INFO" | grep -oP 'NPM_VER=\K.+' )
+      YARN_VER=$(echo "$VERSION_INFO" | grep -oP 'YARN_VER=\K.+' )
+      ALPINE_VER=$(echo "$VERSION_INFO" | grep -oP 'ALPINE_VER=\K.+' )
+
+      # Print version information
+      echo "$NODE_VER"
+      echo "$NPM_VER"
+      echo "$YARN_VER"
+      echo "$ALPINE_VER"
+
+      # Define the expected version values
+      EXPECTED_ALPINE_VERSION="${ALPINE_VERSION}"
+      EXPECTED_NODE_VERSION="${SOFTWARE_VERSION}"
+      EXPECTED_YARN_VERSION="${YARN_VERSION}"
+
+    # Step 4: Compare the actual and expected versions
+    - |
+      if [ "$NODE_VER" != "$EXPECTED_NODE_VERSION" ] || [ "$YARN_VER" != "$EXPECTED_YARN_VERSION" ] || [ "$ALPINE_VER" != "$EXPECTED_ALPINE_VERSION" ]; then
+        echo "Expected versions do not match!"
+        exit 1
+      fi
+
+      echo "Versions match. Proceeding with push."
+
+    # Step 5: Login to the registry
+    - |
+      echo "Logging into GitLab registry"
+      echo "$CI_REGISTRY_PASSWORD" | podman login -u "$CI_REGISTRY_USER" --password-stdin reg-gitlab.hyattdev.com:5556
+      echo "Podman login exit status: $?"  # Check login status
+
+    # Step 6: Push the image to GitLab registry
+    - |
+      echo "Pushing image to GitLab registry..."
+      podman push "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}"
+      echo "Push exit status: $?"
+    #pushing to jfrog
+    - |
+      echo "Pushing image to JFrog..."
+      echo "Logging into JFrog"
+      ARTIFACTORY_USER=jenkins_upload
+      ARTIFACTORY_TOKEN=$(wget -O- --quiet --no-check-certificate https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)      
+      echo "$ARTIFACTORY_TOKEN" | podman login -u "$ARTIFACTORY_USER" --password-stdin "$ARTIFACTORY_URL"
+      podman tag  "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" "$FINAL_IMAGE"  
+      podman push "$FINAL_IMAGE"  
+
+    # Step 8: Save version info to a file and process it into JSON
+  #   - |
+  #     echo "$VERSION_INFO" > version_info.txt
+  #     cat version_info.txt
+  #     awk -F'=| ' '{ for (i=1; i<=NF; i+=2) printf "  \"%s\": \"%s\",\n", tolower($i), $(i+1) }' version_info.txt | sed '$ s/,$//' | awk 'BEGIN {print "{"} {print} END {print "}"}' > $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
+
+  # artifacts:
+  #   paths:
+  #     - $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
+  #   expire_in: 1 week
+
+  rules:
+    - changes:
+        - "${DIR_STRUCTURE}/*"
+

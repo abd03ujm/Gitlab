@@ -1,0 +1,21 @@
+$ echo "Pushing image to GitLab registry..." # collapsed multi-line command
+Pushing image to GitLab registry...
+Getting image source signatures
+Copying blob sha256:c3d1c989bb20fc896120841141b6ea15bb426736929cbbac9c48b9a9bfd6fd3d
+Copying blob sha256:3c7bd630cf8cbfa48ae3dde7c9a33a91b67e3a1df3dbf857ba10d89193e06175
+Copying blob sha256:3f93c1d440c3587157d39faa311988d33eb7f63f609834f3fa4f1809b2b9bfd2
+Copying blob sha256:4192a650bca1d4a40c80c28a11b3720916d0cc310a49b7361acb1ae291a12ee5
+Copying blob sha256:3e01818d79cd3467f1d60e54224f3f6ce5170eceb54e265d96bb82344b8c24e7
+Copying blob sha256:1a043aaec3accefc42f340b58f6bed0a26d11faa1d04ac936bb4e359d5685ce1
+Copying blob sha256:2beaf7614ee5fe1b44c9e0deb55a03bf24898e1ec207609b595d77fc5bbb7233
+Copying config sha256:e1b21673e1c5bf75c7eda4cf93a21f18dd95c80c04673dd9cd077deba462bcfd
+Writing manifest to image destination
+Push exit status: 0
+$ echo "Pushing image to JFrog..." # collapsed multi-line command
+Pushing image to JFrog...
+Logging into JFrog
+Login Succeeded!
+Error: normalizing name "": normalizing name "": repository name must have at least one component
+Cleaning up project directory and file based variables
+00:01
+ERROR: Job failed: command terminated with exit code 1

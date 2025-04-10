@@ -1,0 +1,261 @@
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH
+
+.image-build:
+  stage: build
+  image:
+    name: docker.hyattdev.com/docker/poc/base-images/podman:v1  # Use a Debian-based image (or switch to Fedora for better Podman support)
+    entrypoint: [""]
+  # Update Starting from here
+  variables:
+    # Load variables from .env file
+    MANIFEST_FILE: $DIR_STRUCTURE/manifest
+
+  before_script:
+    # Step 0: load entries from MANIFEST_FILE and expose them as variables
+    - 'if [ -f "$MANIFEST_FILE" ]; then export $(grep -v "^#" $MANIFEST_FILE | xargs); fi'
+  # Update End here
+
+  script:
+    # Update Starting from here
+    # # Step 1: Parse manifest to extract version details
+    # - |
+    #   if [ -f "$DIR_STRUCTURE/manifest" ]; then
+    #     SOFTWARE_VERSION=$(awk '/SOFTWARE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     YARN_VERSION=$(awk '/YARN_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}"
+    #     echo "BUILD_VERSION - ${BUILD_VERSION}"
+    #     echo "YARN_VERSION - ${YARN_VERSION}"
+    #   else
+    #     EXIT 1  
+    #   fi    
+    # Update End here
+    - |
+      echo "Image Taging based on $BUILD_VERSION"
+      if [ -z "$BUILD_VERSION" ]; then
+        FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+        echo "JFROG_if - Building image - $FINAL_IMAGE"
+      else
+        FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+        echo "JFROG_else - Building image - $FINAL_IMAGE"
+      fi  
+
+    # Step 2: Build the image
+    - |
+      ls -lrt ${DIR_STRUCTURE}/Dockerfile
+      cd ${DIR_STRUCTURE}
+      echo "Building image: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+      podman build -t "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" .
+      podman images  # List all images to ensure it's built successfully
+
+    # Step 3: Run the container with the validate.sh under scripts folder
+    - |
+      cd $CI_PROJECT_DIR
+      cp ${DIR_STRUCTURE}/manifest scripts
+      podman run --rm -v $(pwd)/scripts:/usr/src/app/scripts "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" /usr/src/app/scripts/validate.sh
+      echo "Versions match. Proceeding with push."
+      
+    # Update Starting from here
+    # # Step 3: Run the container and capture version info
+    # - |
+    #   VERSION_INFO=$(podman run --rm "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" sh -c '
+    #     echo "NODE_VER=$(node -v)"
+    #     echo "NPM_VER=$(npm -v)"
+    #     echo "YARN_VER=$(yarn -v)"
+    #     echo "ALPINE_VER=$(cat /etc/alpine-release)"
+    #   ')
+
+    #   # Extract individual versions from the VERSION_INFO output
+    #   NODE_VER=$(echo "$VERSION_INFO" | grep -oP 'NODE_VER=\K.+' | sed 's/^v//')
+    #   NPM_VER=$(echo "$VERSION_INFO" | grep -oP 'NPM_VER=\K.+' )
+    #   YARN_VER=$(echo "$VERSION_INFO" | grep -oP 'YARN_VER=\K.+' )
+    #   ALPINE_VER=$(echo "$VERSION_INFO" | grep -oP 'ALPINE_VER=\K.+' )
+
+    #   # Print version information
+    #   echo "$NODE_VER"
+    #   echo "$NPM_VER"
+    #   echo "$YARN_VER"
+    #   echo "$ALPINE_VER"
+
+    #   # Define the expected version values
+    #   EXPECTED_ALPINE_VERSION="${ALPINE_VERSION}"
+    #   EXPECTED_NODE_VERSION="${SOFTWARE_VERSION}"
+    #   EXPECTED_YARN_VERSION="${YARN_VERSION}"
+
+    # # Step 4: Compare the actual and expected versions
+    # - |
+    #   if [ "$NODE_VER" != "$EXPECTED_NODE_VERSION" ] || [ "$YARN_VER" != "$EXPECTED_YARN_VERSION" ] || [ "$ALPINE_VER" != "$EXPECTED_ALPINE_VERSION" ]; then
+    #     echo "Expected versions do not match!"
+    #     exit 1
+    #   fi
+
+    #   echo "Versions match. Proceeding with push."
+    # Update End here
+
+    # Step 5: Login to the registry
+    - |
+      echo "Logging into GitLab registry"
+      echo "$CI_REGISTRY_PASSWORD" | podman login -u "$CI_REGISTRY_USER" --password-stdin reg-gitlab.hyattdev.com:5556
+      echo "Podman login exit status: $?"  # Check login status
+
+    # Step 6: Push the image to GitLab registry
+    - |
+      echo "Pushing image to GitLab registry..."
+      podman push "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}"
+      echo "Push exit status: $?"
+
+    # Step 8: Save version info to a file and process it into JSON
+  #   - |
+  #     echo "$VERSION_INFO" > version_info.txt
+  #     cat version_info.txt
+  #     awk -F'=| ' '{ for (i=1; i<=NF; i+=2) printf "  \"%s\": \"%s\",\n", tolower($i), $(i+1) }' version_info.txt | sed '$ s/,$//' | awk 'BEGIN {print "{"} {print} END {print "}"}' > $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
+
+  # artifacts:
+  #   paths:
+  #     - $CI_PROJECT_DIR/$DIR_STRUCTURE/versions.json
+  #   expire_in: 1 week
+
+  rules:
+    - changes:
+        - "${DIR_STRUCTURE}/*"
+
+.image-deploy:
+  stage: deploy
+  image:
+    name: docker.hyattdev.com/docker/poc/base-images/podman:v1  # Use a Debian-based image (or switch to Fedora for better Podman support)
+    entrypoint: [""]
+  variables:
+    # Load variables from .env file
+    MANIFEST_FILE: $DIR_STRUCTURE/manifest
+
+  before_script:
+    # Step 0: load entries from MANIFEST_FILE and expose them as variables
+    - 'if [ -f "$MANIFEST_FILE" ]; then export $(grep -v "^#" $MANIFEST_FILE | xargs); fi'    
+  script:
+    # # Step 1: Parse manifest to extract version details
+    # - |
+    #   if [ -f "$DIR_STRUCTURE/manifest" ]; then
+    #     SOFTWARE_VERSION=$(awk '/SOFTWARE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
+    #     RUN_TIME=$(awk '/RUN_TIME/{print $2}' $DIR_STRUCTURE/manifest)
+    #     SOFTWARE_TYPE=$(awk '/SOFTWARE_TYPE/{print $2}' $DIR_STRUCTURE/manifest)
+    #     echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}"
+    #     echo "BUILD_VERSION - ${BUILD_VERSION}" 
+    #   else
+    #     EXIT 1
+    #   fi  
+    # - |
+    #   echo "Image Taging based on $BUILD_VERSION"
+    #   if [ -z "$BUILD_VERSION" ]; then
+    #     FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+    #     echo "Building image - $FINAL_IMAGE"
+    #   else
+    #     FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+    #     echo "Building image - $FINAL_IMAGE"
+    #   fi
+
+    - |
+      if [ "$SOFTWARE_TYPE" = "node" ]; then
+
+        echo "Image Taging based on $BUILD_VERSION"
+        if [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        fi
+      elif [ "$SOFTWARE_TYPE" = "java" ]; then
+        echo "Image Taging based on $RUN_TIME"
+        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+          echo "JFROG_if - Building image - $FINAL_IMAGE"  
+        else
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        fi
+      elif [ "$SOFTWARE_TYPE" = "nginx" ]; then
+        if [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+        fi      
+        echo "Building image - $FINAL_IMAGE"
+      fi
+      
+
+    # Step 7: Login to JFrog and optionally push to JFrog registry
+    - |
+
+      echo "Podman login exit status: $?"  # Check login status
+      echo "$CI_REGISTRY_PASSWORD" | podman login -u "$CI_REGISTRY_USER" --password-stdin reg-gitlab.hyattdev.com:5556
+      podman pull ${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}
+      echo "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" "$FINAL_IMAGE"
+      podman tag "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" "$FINAL_IMAGE"
+      echo "Tagging exit status: $?"
+
+    - |
+      echo "Pushing image to JFrog..."
+      echo "Logging into JFrog"
+      ARTIFACTORY_USER=jenkins_upload
+      ARTIFACTORY_TOKEN=$(wget -O- --quiet --no-check-certificate https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)      
+      echo "$ARTIFACTORY_TOKEN" | podman login -u "$ARTIFACTORY_USER" --password-stdin "$ARTIFACTORY_URL"
+      podman push "$FINAL_IMAGE"
+  rules:
+    # Run the deploy job manually if it's the default branch and specific files change
+    - if: '$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH'
+    #- if:  '$CI_COMMIT_REF_NAME == "FT-develop"'
+    - if:  '$CI_COMMIT_REF_NAME == "testing-branch-strategy"'
+      changes:
+        - "${DIR_STRUCTURE}/manifest"
+        - "${DIR_STRUCTURE}/Dockerfile"
+      when: manual
+
+    # Never trigger the deploy job for other branches
+    - when: never
+
+# sections above are an overwritten version of the template from 
+# https://gitlab.hyattdev.com/hyatt/pipelines/gitlab-ci-templates/-/blob/main/jobs/image-build.yml and
+# https://gitlab.hyattdev.com/hyatt/pipelines/gitlab-ci-templates/-/blob/main/jobs/image-deploy.yml
+
+#building pipeline
+stages:
+  - build
+  - deploy
+
+
+include:
+  - project: 'hyatt/pipelines/gitlab-ci-templates'
+    ref: 'main'
+    file:
+      - 'jobs/image-build.yml'
+      - 'jobs/image-deploy.yml'
+
+variables:
+  ARTIFACTORY_USER: jenkins_upload  
+  ARTIFACTORY_URL: "https://docker.hyattdev.com"
+  IMAGE_PATH: docker.hyattdev.com/digital/alpine-nginx
+
+.matrix:
+  parallel:
+    matrix:
+      - DIR_STRUCTURE:
+        - "1.26/alpine3.21"
+      
+build:
+  extends: 
+    - .image-build
+    - .matrix
+deploy:
+  extends: 
+    - .image-deploy
+    - .matrix
+

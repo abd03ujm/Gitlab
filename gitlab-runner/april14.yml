@@ -1,0 +1,161 @@
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - pre-build
+  - build
+  - test
+
+# pre-build stage
+.pre-build:
+  stage: pre-build
+  image: $PODMAN_IMAGE
+  before_script:
+    # Step 0: load entries from MANIFEST_FILE and expose them as variables
+    - 'if [ -f "$MANIFEST_FILE" ]; then export $(grep -v "^#" $MANIFEST_FILE | xargs); fi'  
+    - CI_APPLICATION_REPOSITORY="$ARTIFACTORY_REPOSITORY/$PROJECT_NAME"
+  script:
+
+
+    - |
+      if [ "$SOFTWARE_TYPE" = "node" ]; then
+        echo "Setting image tag based on BUILD_VERSION..."
+        if [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+          TAG="${SOFTWARE_VERSION}"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+        fi
+      elif [ "$SOFTWARE_TYPE" = "java" ]; then
+        echo "Setting image tag based on RUN_TIME..."
+        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+          TAG="$RUN_TIME-${SOFTWARE_VERSION}"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          TAG="$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+        fi
+      fi
+
+      echo "FINAL_IMAGE: $FINAL_IMAGE"
+      echo "TAG: $TAG"
+
+    - |
+      image_found=""
+      
+      # docker_find_image_by_revision() {
+      #   repo=$1
+      #   sum=$2
+      #   path=$3
+      #   json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+      #       {"@docker.label.git.revision":{ "$eq" : "%s" }},
+      #       {"path": { "$match": "*%s/*" }})
+      #       .sort({ "$desc": ["created"]})
+      #       .limit(1)' "$repo" "$sum" "$path" )
+      docker_find_image_by_tag() {
+      repo=$1
+      name=$2
+      path=$3
+
+      # Build the correct AQL
+      json_string=$(printf 'items.find(
+          {"repo": { "$eq": "%s" }},
+          {"name": { "$eq": "%s" }},
+          {"path": { "$match": "%s" }},
+          {"type": "file"}
+      )
+      .sort({ "$desc": ["created"]})
+      .limit(1)' "$repo" "$name" "$path")
+
+      echo "[DEBUG] AQL Query:"
+      echo "$json_string"
+
+      # Get Artifactory token
+      token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+      # Query Artifactory
+      response=$(curl -s -u "${ARTIFACTORY_USER}:${token}" \
+          -X POST "https://artifacts.hyattdev.com/artifactory/api/search/aql" \
+          -H "Content-Type: text/plain" \
+          -d "$json_string")
+
+      echo "[DEBUG] Response from Artifactory:"
+      echo "$response"
+        if echo "$response" | jq -e '.results | length == 0' >/dev/null 2>&1; then
+        echo "Image NOT found"
+        image_found="0"
+        else
+            echo "Image FOUND"
+            match=$(echo "$response" | jq -r '.results[0].path')
+            image_found="$match"
+        fi
+      }
+  rules:
+    - changes:
+        - "${DIR_STRUCTURE}/*"
+# build stage
+.build:
+  stage: build
+  image:
+    name: docker.hyattdev.com/docker/poc/base-images/podman:v1  # Use a Debian-based image (or switch to Fedora for better Podman support)
+    entrypoint: [""]
+  before_script:
+    # Step 0: load entries from MANIFEST_FILE and expose them as variables
+    - 'if [ -f "$MANIFEST_FILE" ]; then export $(grep -v "^#" $MANIFEST_FILE | xargs); fi'
+
+  script:
+    - |
+      if [ "$SOFTWARE_TYPE" = "node" ]; then
+        echo "Image Taging based on $BUILD_VERSION"
+        if [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        else
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        fi
+      elif [ "$SOFTWARE_TYPE" = "java" ]; then
+        echo "Image Taging based on $RUN_TIME"
+        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+          echo "Building image - $FINAL_IMAGE"  
+        else
+          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          echo "Building image - $FINAL_IMAGE"
+        fi
+      fi
+    # Step 2: Build the image
+    - |
+      ls -lrt ${DIR_STRUCTURE}/Dockerfile
+      cd ${DIR_STRUCTURE}
+      echo "Building image: ${FINAL_IMAGE}"
+      podman build -t "${FINAL_IMAGE}" .
+      podman images  
+
+    # Step 3: Run the container and capture version info
+    - |
+      podman run --rm -v $(pwd):/usr/src/app "${FINAL_IMAGE}" sh /usr/src/app/scripts/validate.sh
+      echo "Versions match. Proceeding with push."
+
+    #pushing to jfrog
+    - |
+      echo "Pushing image to JFrog..."
+      echo "Logging into JFrog"
+      ARTIFACTORY_USER=jenkins_upload
+      token=$(wget -O- --quiet --no-check-certificate https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)     
+      echo "$token" | podman login -u "$ARTIFACTORY_USER" --password-stdin "$ARTIFACTORY_URL"
+      podman push "$FINAL_IMAGE"  
+  rules:
+    - changes:
+        - "${DIR_STRUCTURE}/*"
+
+

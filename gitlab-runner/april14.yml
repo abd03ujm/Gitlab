@@ -1,35 +1,151 @@
-   image_found=""
-      docker_find_image_by_tag "dockerv2-prod" "$CI_APPLICATION_REPOSITORY/$RELEASE_TAG"
-      docker_find_image_by_tag() {
-        
-        repo=$1
-        path=$2
+include:
+  - local: docker-functions.yaml
+  
+release:
+  stage: release
+  resource_group: production
+  environment:
+    name: production
+    deployment_tier: production
+  image: "$PODMAN_IMAGE"
+  when: manual
+  rules:
+  - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_PROTECTED == "true"'
+    when: manual
+  - when: never
+  # - *deploy_rules
+  script: 
+    - !reference [.functions, docker_funcs ]
+    - |
+      set -e
+      if ! [ -z "$TRACE" ]; then
+        set -x
+      fi
 
-        # Conversion to JSON
-        json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
-            {"path": { "$match": "%s" }})
-            .sort({ "$desc": ["created"]})
-            .limit(1)' "$repo" "$path" )
+      export HYATT_IMAGE_TAG=$CI_PIPELINE_IID.$CI_COMMIT_SHORT_SHA
+      echo "Image Tag - $HYATT_IMAGE_TAG"
+      export CI_APPLICATION_TAG=$HYATT_IMAGE_TAG
 
-        if ! [ -z "$TRACE" ]; then
-          echo $json_string
-        fi
+      # export CI_APPLICATION_REPOSITORY=$ARTIFACTORY_REPOSITORY/$CI_PROJECT_NAME
+      if [[ -z "$KUBE_NAMESPACE" ]]; then
+        # not a K8s deployment ( no KUBE_NAMESPACE set )
+        export CI_APPLICATION_REPOSITORY=$ARTIFACTORY_REPOSITORY/$CI_PROJECT_NAME
+        # $ARTIFACTORY_REPOSITORY/$CI_PROJECT_NAME - {docker.hyattdev.com/docker}/{svc-fodder}
+      else
+        export CI_APPLICATION_REPOSITORY=$ARTIFACTORY_REGISTRY/$CI_PROJECT_PATH
+        # $ARTIFACTORY_REGISTRY/$CI_PROJECT_PATH - {docker.hyattdev.com}/{hyatt/configmanagement/svc-fodder}
+      fi
 
-        token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+      if [[ -z "$CI_COMMIT_TAG" ]]; then
+        export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG}
+        export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_SHA}
+      else
+        export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE}
+        export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_TAG}
+      fi
 
-        response=$(curl -s -H "Content-Type: text/plain"  \
-            -X POST -d "$json_string" \
-            -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+      echo "CI_APPLICATION_REPOSITORY ${CI_APPLICATION_REPOSITORY}"
+      echo "CI_APPLICATION_TAG ${CI_APPLICATION_TAG}"
+      #echo "CI_REGISTRY_IMAGE ${CI_REGISTRY_IMAGE}"
+      echo "FINAL_IMAGE_TAG ${FINAL_IMAGE_TAG}"
 
-        match=$(echo $response | jq '.results[0].path')
-        
-        if [[ "$match" == "null" ]]; then
-          image_found="0"
+      echo "Logging in to Artifactory Registry..."
+      token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+      docker_login_filtered "$ARTIFACTORY_USER" "$token" "$ARTIFACTORY_REGISTRY"
+    
+      subtract_host=$CI_APPLICATION_REPOSITORY
+      subtract_host=$(echo -n $subtract_host | sed "s/^$ARTIFACTORY_REGISTRY\///")
+      subtract_host=$(echo -n $subtract_host | sed "s/^$CI_REGISTRY\///")
+
+      docker_find_image_by_revision "dockerv2-local" $CI_COMMIT_SHA "$subtract_host"
+
+      # convert path to image tag
+      echo "first: $image_found"
+      original_image_path=$image_found
+      original_image_tagged=$(echo -n $image_found | sed 's/\(.*\)\//\1:/')
+      echo "original_image_tagged: $original_image_tagged"
+      echo "original_image_path: $original_image_path"
+
+      # check to see if FINAL_IMAGE_TAG is comma delimited with tags
+      if [ "$FINAL_IMAGE_TAG" == *","* ]; then
+          # comma delimited tags
+          echo $FINAL_IMAGE_TAG | tr ',' '\n' | while IFS= read -r TAG; do
+
+          if [[ -z "$KUBE_NAMESPACE" ]]; then
+            docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME/$TAG"
+          else
+            docker_find_image_by_tag "dockerv2-prod" "$CI_PROJECT_PATH/$CI_PROJECT_NAME/$TAG"
+          fi
+
+          if [ "$image_found" != "0" ]; then
+            # exists
+            echo "docker image with this tag already exists; not pushing tagged image"
+          else
+            if [[ -z "$KUBE_NAMESPACE" ]]; then
+              # not a K8s deployment ( no KUBE_NAMESPACE set )
+              echo "docker promote $original_image_tagged $CI_APPLICATION_REPOSITORY:$TAG"
+            else
+              echo "docker promote $original_image_tagged $CI_APPLICATION_REPOSITORY:$TAG"
+            fi
+
+            image_tagged=$original_image_tagged
+            image_tagged=$(echo -n $image_tagged | sed 's/\(.*\):\(.*\)/\2/')
+
+            path=$(echo -n $original_image_tagged | sed 's/\(.*\):\(.*\)/\1/')
+            echo "file path $path"
+
+            # promotion is all done on the server-side of artifactory and is an atomic move to dockerv2-prod repo
+            docker_promote $path $image_tagged $TAG
+          fi
+        done
+      else
+
+        # no comma's in the TAG
+        if [[ -z "$KUBE_NAMESPACE" ]]; then
+          # not a K8s deployment ( no KUBE_NAMESPACE set )
+          docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$CI_PROJECT_NAME/$FINAL_IMAGE_TAG"
+          #{docker}/{alpine-bob}/{1.3.1_01}
         else
-          image_found="1"
-          echo "found image is - $CI_APPLICATION_REPOSITORY/$RELEASE_TAG"
-          exit 1
+          docker_find_image_by_tag "dockerv2-prod" "$CI_PROJECT_PATH/$CI_PROJECT_NAME/$FINAL_IMAGE_TAG"
+          #{hyatt/configmanagement}/{svc-fodder}/{1.3.1_01}
         fi
 
-      } 
-      echo "finding image"
+        if [ "$image_found" != "0" ]; then
+          # exists
+          echo "docker image with this tag already exists; not pushing tagged image"
+        else
+          if [[ -z "$KUBE_NAMESPACE" ]]; then
+            # not a K8s deployment ( no KUBE_NAMESPACE set )
+
+            image_tagged=$original_image_tagged
+            image_tagged=$(echo -n $image_tagged | sed 's/\(.*\):\(.*\)/\2/')
+
+            path=$(echo -n $original_image_tagged | sed 's/\(.*\):\(.*\)/\1/')
+            echo "file path $path"
+
+            echo "docker promote $image_tagged $FINAL_IMAGE_TAG"
+
+            # promotion is all done on the server-side of artifactory and is an atomic move to dockerv2-prod repo
+            echo "original_image_path: $original_image_path"
+            docker_promote $path $image_tagged $FINAL_IMAGE_TAG 
+          else 
+
+            image_tagged=$original_image_tagged
+            image_tagged=$(echo -n $image_tagged | sed 's/\(.*\):\(.*\)/\2/')
+
+            path=$(echo -n $original_image_tagged | sed 's/\(.*\):\(.*\)/\1/')
+            echo "file path $path"
+
+            echo "docker promote $image_tagged $FINAL_IMAGE_TAG"
+
+            # promotion is all done on the server-side of artifactory and is an atomic move to dockerv2-prod repo
+            echo "original_image_path: $original_image_path"
+            docker_promote $path $image_tagged $FINAL_IMAGE_TAG 
+          fi
+
+        fi
+      fi
+
+ 
+
+

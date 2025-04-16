@@ -1,0 +1,99 @@
+ .functions:
+     docker_funcs: |
+        filter_docker_warning() {
+            grep -E -v "^WARNING! Your password will be stored unencrypted in |^Configure a credential helper to remove this warning. See|^https://docs.docker.com/engine/reference/commandline/login/#credentials-store|Failed to decode the keys" || true
+        }
+
+        docker_login_filtered() {
+            # $1 - username, $2 - password, $3 - registry
+            # this filters the stderr of the `docker login`, without merging stdout and stderr together
+            { echo "$2" | docker login -u "$1" --password-stdin "$3" 2>&1 1>&3 | filter_docker_warning 1>&2; } 3>&1  
+        }
+
+        image_found=""
+        docker_find_image_by_tag() {
+        
+            repo=$1
+            path=$2
+
+            # Conversion to JSON
+            json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+                {"path": { "$match": "%s" }})
+                .sort({ "$desc": ["created"]})
+                .limit(1)' "$repo" "$path" )
+
+            if ! [ -z "$TRACE" ]; then
+                echo $json_string
+            fi
+
+            token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+            response=$(curl -s -H "Content-Type: text/plain"  \
+                -X POST -d "$json_string" \
+                -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+
+            match=$(echo $response | jq -r '.results[0].path')
+            
+            if [ "$match" == "null" ]; then
+                image_found="0"
+            else
+                image_found="$match"
+            fi
+
+        }
+
+        docker_find_image_by_revision() {
+            repo=$1
+            sum=$2
+            path=$3
+
+            # Conversion to JSON
+            json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+                {"@docker.label.git.revision":{ "$eq" : "%s" }},
+                {"path": { "$match": "*%s/*" }})
+                .sort({ "$desc": ["created"]})
+                .limit(1)' "$repo" "$sum" "$path" )
+
+            if ! [ -z "$TRACE" ]; then
+                echo $json_string
+            fi
+
+            token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+            response=$(curl -s -H "Content-Type: text/plain"  \
+                -X POST -d "$json_string" \
+                -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+
+            match=$(echo $response | jq -r '.results[0].path')
+            
+            if [ "$match" == "null" ]; then
+                image_found="0"
+            else
+                image_found="$match"
+            fi
+        }
+        
+        # promote a docker image to dockerv2-prod
+        docker_promote() {
+            # $1 sourcepath - $2 - sourcetag, $3 - targetTag, 
+
+            targetRepo=dockerv2-prod
+            dockerRepo=$1
+            sourceTag=$2
+            targetTag=$3
+
+            # Conversion to JSON
+            json_string=$(printf '{
+                "targetRepo": "%s",
+                "dockerRepository": "%s",
+                "tag": "%s",
+                "targetTag": "%s",
+                "copy": "false"
+            }' "$targetRepo" "$dockerRepo" "$sourceTag" "$targetTag" )
+
+            token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+            curl -s -H "Content-Type: application/json"  \
+                -X POST -d "$json_string" \
+                -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/docker/dockerv2-local/v2/promote"
+        }

@@ -17,7 +17,11 @@ stages:
     - 'if [ -f "$MANIFEST_FILE" ]; then export $(grep -v "^#" $MANIFEST_FILE | xargs); fi'  
     - CI_APPLICATION_REPOSITORY="$ARTIFACTORY_REPOSITORY/$PROJECT_NAME"
   script:
-
+    - |
+      echo "Running pre-build stage..."
+      echo "Repo is $CI_APPLICATION_REPOSITORY"
+      echo "Project name is $PROJECT_NAME"
+      echo "Release tag is $RELEASE_TAG"
 
     - |
       if [ -z "$RELEASE_TAG" ]; then
@@ -103,7 +107,7 @@ stages:
 
   script:
     - |
-      if [ -z "$RELEASE_TAG" ]; then
+      if [ -z "$$RELEASE_TAG" ]; then
         FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
         echo "Setting image tag to $FINAL_IMAGE"  based on RELEASE_TAG... "
       else

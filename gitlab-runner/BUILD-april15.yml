@@ -27,22 +27,22 @@ stages:
         if [ "$SOFTWARE_TYPE" = "node" ]; then
           echo "Setting image tag based on BUILD_VERSION..."
           if [ -z "$BUILD_VERSION" ]; then
-            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}"
             TAG="${SOFTWARE_VERSION}"
           else
-            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}-${BUILD_VERSION}"
             TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
           fi
         elif [ "$SOFTWARE_TYPE" = "java" ]; then
           echo "Setting image tag based on RUN_TIME..."
           if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
-            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}-${BUILD_VERSION}"
             TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
           elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
-            FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RUN_TIME-${SOFTWARE_VERSION}"
             TAG="$RUN_TIME-${SOFTWARE_VERSION}"
           else
-            FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
             TAG="$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
           fi
         fi
@@ -80,10 +80,11 @@ stages:
                 image_found="0"
             else
                 image_found="$match"
+                exit 1
             fi
 
       }
-      docker_find_image_by_tag "$RELEASE_TAG" "$CI_APPLICATION_REPOSITORY"
+      docker_find_image_by_tag "dockerv2-prod" "$CI_APPLICATION_REPOSITORY/$RELEASE_TAG"
   rules:
     - changes:
         - "${DIR_STRUCTURE}/*"
@@ -109,29 +110,29 @@ stages:
         if [ "$SOFTWARE_TYPE" = "node" ]; then
           echo "Setting image tag based on BUILD_VERSION..."
           if [ -z "$BUILD_VERSION" ]; then
-            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}"
             TAG="${SOFTWARE_VERSION}"
           else
-            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}-${BUILD_VERSION}"
             TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
           fi
         elif [ "$SOFTWARE_TYPE" = "java" ]; then
           echo "Setting image tag based on RUN_TIME..."
           if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
-            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}-${BUILD_VERSION}"
             TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
           elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
-            FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RUN_TIME-${SOFTWARE_VERSION}"
             TAG="$RUN_TIME-${SOFTWARE_VERSION}"
           else
-            FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
             TAG="$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
           fi
         fi
 
         echo "FINAL_IMAGE: $FINAL_IMAGE"
         echo "TAG: $TAG"
-      fi 
+      fi  
     # Step 2: Build the image
     - |
       ls -lrt ${DIR_STRUCTURE}/Dockerfile

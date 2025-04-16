@@ -20,93 +20,75 @@ stages:
 
 
     - |
-      if [ "$SOFTWARE_TYPE" = "node" ]; then
-        echo "Setting image tag based on BUILD_VERSION..."
-        if [ -z "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
-          TAG="${SOFTWARE_VERSION}"
-        else
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+      if [ -z "$$RELEASE_TAG" ]; then
+        FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RElEASE_TAG"
+        echo "Setting image tag to $FINAL_IMAGE"  based on RELEASE_TAG... "
+      else
+        if [ "$SOFTWARE_TYPE" = "node" ]; then
+          echo "Setting image tag based on BUILD_VERSION..."
+          if [ -z "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+            TAG="${SOFTWARE_VERSION}"
+          else
+            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          fi
+        elif [ "$SOFTWARE_TYPE" = "java" ]; then
+          echo "Setting image tag based on RUN_TIME..."
+          if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+            TAG="$RUN_TIME-${SOFTWARE_VERSION}"
+          else
+            FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          fi
         fi
-      elif [ "$SOFTWARE_TYPE" = "java" ]; then
-        echo "Setting image tag based on RUN_TIME..."
-        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
-        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
-          TAG="$RUN_TIME-${SOFTWARE_VERSION}"
-        else
-          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          TAG="$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
-        fi
-      fi
 
-      echo "FINAL_IMAGE: $FINAL_IMAGE"
-      echo "TAG: $TAG"
+        echo "FINAL_IMAGE: $FINAL_IMAGE"
+        echo "TAG: $TAG"
+      fi 
+    
 
     - |
-      echo "Logging in to Artifactory Registry..."
-      token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
-      docker_login_filtered "$ARTIFACTORY_USER" "$token" "$ARTIFACTORY_REGISTRY"
-    
-      subtract_host=$CI_APPLICATION_REPOSITORY
-      subtract_host=$(echo -n $subtract_host | sed "s/^$ARTIFACTORY_REGISTRY\///")
-      
-
-      docker_find_image_by_revision "dockerv2-local" $RELEASE_TAG "$subtract_host"
-      echo "first: $image_found"
-      original_image_path=$image_found
-      original_image_tagged=$(echo -n $image_found | sed 's/\(.*\)\//\1:/')
-      echo "original_image_tagged: $original_image_tagged"
-      echo "original_image_path: $original_image_path"
-
-
-      echo "result is - "
-
-      # image_found=""
-
-      # docker_find_image_by_tag() {
+      docker_find_image_by_tag() {
         
-      #   repo=$1
-      #   path=$2
-      #   echo "repo details - $1 $2"
+            repo=$1
+            path=$2
 
-      #   # Conversion to JSON
-      #   json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
-      #       {"path": { "$match": "%s" }})
-      #       .sort({ "$desc": ["created"]})
-      #       .limit(1)' "$repo" "$path" )
+            # Conversion to JSON
+            json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+                {"path": { "$match": "%s" }})
+                .sort({ "$desc": ["created"]})
+                .limit(1)' "$repo" "$path" )
 
-      #   #if ! [ -z "$TRACE" ]; then
-      #     echo $json_string
-      #   #fi
+            if ! [ -z "$TRACE" ]; then
+                echo $json_string
+            fi
 
-      #   token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+            token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
 
-      #   response=$(curl -s -H "Content-Type: text/plain"  \
-      #       -X POST -d "$json_string" \
-      #       -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
-      #   echo "responce is  $responce"
-      #   match=$(echo $response | jq '.results[0].path')
-      #   echo "match is  $match"
-      #   if [[ "$match" == "null" ]]; then
-      #     image_found="0"
-      #   else
-      #     image_found="1"
-      #     echo "found image is - $CI_APPLICATION_REPOSITORY/$RELEASE_TAG"
-      #     exit 1
-      #   fi
+            response=$(curl -s -H "Content-Type: text/plain"  \
+                -X POST -d "$json_string" \
+                -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
 
-      # } 
-      # echo "finding image"
-      # docker_find_image_by_tag "dockerv2-prod" "$CI_APPLICATION_REPOSITORY/$RELEASE_TAG"
-      # echo "finding is done"
-    
+            match=$(echo $response | jq -r '.results[0].path')
+            
+            if [ "$match" == "null" ]; then
+                image_found="0"
+            else
+                image_found="$match"
+            fi
+
+      }
+      docker_find_image_by_tag "$RELEASE_TAG" "$CI_APPLICATION_REPOSITORY"
   rules:
     - changes:
         - "${DIR_STRUCTURE}/*"
+
+        
 # build stage
 .build:
   stage: build
@@ -116,31 +98,40 @@ stages:
   before_script:
     # Step 0: load entries from MANIFEST_FILE and expose them as variables
     - 'if [ -f "$MANIFEST_FILE" ]; then export $(grep -v "^#" $MANIFEST_FILE | xargs); fi'
+    - CI_APPLICATION_REPOSITORY="$ARTIFACTORY_REPOSITORY/$PROJECT_NAME"
 
   script:
     - |
-      if [ "$SOFTWARE_TYPE" = "node" ]; then
-        echo "Image Taging based on $BUILD_VERSION"
-        if [ -z "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
-          echo "Building image - $FINAL_IMAGE"
-        else
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          echo "Building image - $FINAL_IMAGE"
+      if [ -z "$$RELEASE_TAG" ]; then
+        FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RElEASE_TAG"
+        echo "Setting image tag to $FINAL_IMAGE"  based on RELEASE_TAG... "
+      else
+        if [ "$SOFTWARE_TYPE" = "node" ]; then
+          echo "Setting image tag based on BUILD_VERSION..."
+          if [ -z "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
+            TAG="${SOFTWARE_VERSION}"
+          else
+            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          fi
+        elif [ "$SOFTWARE_TYPE" = "java" ]; then
+          echo "Setting image tag based on RUN_TIME..."
+          if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
+            TAG="$RUN_TIME-${SOFTWARE_VERSION}"
+          else
+            FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          fi
         fi
-      elif [ "$SOFTWARE_TYPE" = "java" ]; then
-        echo "Image Taging based on $RUN_TIME"
-        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          echo "Building image - $FINAL_IMAGE"
-        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
-          echo "Building image - $FINAL_IMAGE"  
-        else
-          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          echo "Building image - $FINAL_IMAGE"
-        fi
-      fi
+
+        echo "FINAL_IMAGE: $FINAL_IMAGE"
+        echo "TAG: $TAG"
+      fi 
     # Step 2: Build the image
     - |
       ls -lrt ${DIR_STRUCTURE}/Dockerfile
@@ -165,5 +156,4 @@ stages:
   rules:
     - changes:
         - "${DIR_STRUCTURE}/*"
-
 

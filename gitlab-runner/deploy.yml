@@ -1,85 +1,163 @@
+
+
 .image-deploy:
   stage: deploy
-  image:
-    name: docker.hyattdev.com/docker/poc/base-images/podman:v1  # Use a Debian-based image (or switch to Fedora for better Podman support)
-    entrypoint: [""]
+  image: "$PODMAN_IMAGE"
+  before_script:
+    # Step 0: load entries from MANIFEST_FILE and expose them as variables
+    - 'if [ -f "$MANIFEST_FILE" ]; then export $(grep -v "^#" $MANIFEST_FILE | xargs); fi'  
+
   script:
-    # Step 1: Parse manifest to extract version details
+    # Step 2: Define FINAL_IMAGE and TAG based on SOFTWARE_TYPE
     - |
-      if [ -f "$DIR_STRUCTURE/manifest" ]; then
-        SOFTWARE_VERSION=$(awk '/SOFTWARE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
-        ALPINE_VERSION=$(awk '/ALPINE_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
-        BUILD_VERSION=$(awk '/BUILD_VERSION/{print $2}' $DIR_STRUCTURE/manifest)
-        RUN_TIME=$(awk '/RUN_TIME/{print $2}' $DIR_STRUCTURE/manifest)
-        SOFTWARE_TYPE=$(awk '/SOFTWARE_TYPE/{print $2}' $DIR_STRUCTURE/manifest)
-        echo "SOFTWARE_VERSION - ${SOFTWARE_VERSION}"
-        echo "BUILD_VERSION - ${BUILD_VERSION}" 
+      if [ -z "$RELEASE_TAG" ]; then
+        FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
+        echo "Setting image tag to $FINAL_IMAGE"  based on RELEASE_TAG... "
       else
-        EXIT 1
-      fi  
-    # - |
-    #   echo "Image Taging based on $BUILD_VERSION"
-    #   if [ -z "$BUILD_VERSION" ]; then
-    #     FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
-    #     echo "Building image - $FINAL_IMAGE"
-    #   else
-    #     FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
-    #     echo "Building image - $FINAL_IMAGE"
-    #   fi
-
-    - |
-      if [ "$SOFTWARE_TYPE" = "node" ]; then
-
-        echo "Image Taging based on $BUILD_VERSION"
-        if [ -z "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}"
-          echo "Building image - $FINAL_IMAGE"
-        else
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          echo "Building image - $FINAL_IMAGE"
+        if [ "$SOFTWARE_TYPE" = "node" ]; then
+          echo "Setting image tag based on BUILD_VERSION..."
+          if [ -z "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}"
+            TAG="${SOFTWARE_VERSION}"
+          else
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          fi
+        elif [ "$SOFTWARE_TYPE" = "java" ]; then
+          echo "Setting image tag based on RUN_TIME..."
+          if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RUN_TIME-${SOFTWARE_VERSION}"
+            TAG="$RUN_TIME-${SOFTWARE_VERSION}"
+          else
+            FINAL_IMAGE="$CI_APPLICATION_REPOSITORY:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+            TAG="$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
+          fi
         fi
-      elif [ "$SOFTWARE_TYPE" = "java" ]; then
-        echo "Image Taging based on $RUN_TIME"
-        if [ -z "$RUN_TIME" ] && [ -n "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          echo "Building image - $FINAL_IMAGE"
-        elif [ -n "$RUN_TIME" ] && [ -z "$BUILD_VERSION" ]; then
-          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}"
-          echo "JFROG_if - Building image - $FINAL_IMAGE"  
+
+        echo "FINAL_IMAGE: $FINAL_IMAGE"
+        echo "TAG: $TAG"
+      fi
+
+    # Step 3: Define image promotion functions
+    - |
+      image_found=""
+
+      docker_find_image_by_tag() {
+        
+        repo=$1
+        path=$2
+
+        # Conversion to JSON
+        json_string=$(printf 'items.find({"repo": { "$eq": "%s" }},
+            {"path": { "$match": "%s" }})
+            .sort({ "$desc": ["created"]})
+            .limit(1)' "$repo" "$path" )
+
+        if ! [ -z "$TRACE" ]; then
+          echo $json_string
+        fi
+
+        token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+        response=$(curl -s -H "Content-Type: text/plain"  \
+            -X POST -d "$json_string" \
+            -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/search/aql")
+
+        match=$(echo $response | jq '.results[0].path')
+        
+        if [[ "$match" == "null" ]]; then
+          image_found="0"
         else
-          FINAL_IMAGE="$IMAGE_PATH:$RUN_TIME-${SOFTWARE_VERSION}-${BUILD_VERSION}"
-          echo "Building image - $FINAL_IMAGE"
+          image_found="1"
+        fi
+
+      }
+      
+      # promote a docker image to dockerv2-prod
+      docker_promote() {
+        # $1 - sourcetag, $2 - targetTag, 
+
+        targetRepo=dockerv2-prod
+        dockerRepo=$ARTIFACTORY_PROJECT/$PROJECT_NAME
+        sourceTag=$1
+        targetTag=$2
+
+        # Conversion to JSON
+        json_string=$(printf '{
+            "targetRepo": "%s",
+            "dockerRepository": "%s",
+            "tag": "%s",
+            "targetTag": "%s",
+            "copy": "false"
+        }' "$targetRepo" "$dockerRepo" "$sourceTag" "$targetTag" )
+
+        token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+
+        curl -s -H "Content-Type: application/json"  \
+            -X POST -d "$json_string" \
+            -u "$ARTIFACTORY_USER:$token" "https://artifacts.hyattdev.com/artifactory/api/docker/dockerv2-local/v2/promote"
+      }
+
+
+    # Step 4: Pull and Promote Image
+    - |
+      #echo "Pulling source image: $FINAL_IMAGE"
+      #docker pull --quiet "$FINAL_IMAGE"
+
+      CI_APPLICATION_REPOSITORY="$ARTIFACTORY_REPOSITORY/$PROJECT_NAME"
+
+      if [[ "$RELEASE_TAG" == *","* ]]; then
+        echo "$RELEASE_TAG" | tr ',' '\n' | while IFS= read -r RELEASE_TAG; do
+          found=$(docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$PROJECT_NAME/$RELEASE_TAG")
+
+          if [[ "$found" -eq 1 ]]; then
+            echo "Image with tag '$RELEASE_TAG' already exists in prod. Skipping."
+          else
+            docker images
+            echo "step-1"
+            token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+            docker login docker.hyattdev.com  -u jenkins_upload -p $token
+            echo "Tagging and pushing image with tag: $RELEASE_TAG"
+            echo docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
+            docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
+
+            echo docker push "$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
+            docker push "$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
+
+            echo docker_promote "$RELEASE_TAG" "$RELEASE_TAG"
+            docker_promote "$RELEASE_TAG" "$RELEASE_TAG"
+            docker images
+          fi
+        done
+      else
+        found=$(docker_find_image_by_tag "dockerv2-prod" "$ARTIFACTORY_PROJECT/$PROJECT_NAME/$RELEASE_TAG")
+
+        if [[ "$found" -eq 1 ]]; then
+          echo "Image with tag '$RELEASE_TAG' already exists in prod. Skipping."
+        else
+          docker images
+          echo "step-2"
+          token=$(curl -s https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)
+          docker login docker.hyattdev.com  -u jenkins_upload -p $token
+          echo "Tagging and pushing image with tag: $RELEASE_TAG"
+          echo docker tag "$FINAL_IMAGE" "$FINAL_IMAGE"
+          docker tag "$FINAL_IMAGE" "$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
+
+          echo docker push "$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
+          docker push "$CI_APPLICATION_REPOSITORY:$RELEASE_TAG"
+
+          echo docker_promote "$RELEASE_TAG" "$RELEASE_TAG"
+          docker_promote "$RELEASE_TAG" "$RELEASE_TAG"
+          docker images
         fi
       fi
-      
 
-    # Step 7: Login to JFrog and optionally push to JFrog registry
-    - |
-
-      echo "Podman login exit status: $?"  # Check login status
-      echo "$CI_REGISTRY_PASSWORD" | podman login -u "$CI_REGISTRY_USER" --password-stdin reg-gitlab.hyattdev.com:5556
-      podman pull ${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}
-      echo "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" "$FINAL_IMAGE"
-      podman tag "${CI_REGISTRY_IMAGE}:${SOFTWARE_VERSION}-${CI_COMMIT_SHORT_SHA}" "$FINAL_IMAGE"
-      echo "Tagging exit status: $?"
-
-    - |
-      echo "Pushing image to JFrog..."
-      echo "Logging into JFrog"
-      ARTIFACTORY_USER=jenkins_upload
-      ARTIFACTORY_TOKEN=$(wget -O- --quiet --no-check-certificate https://svc-cicd-tools.k8.nprd.hyattsys.net/artifactory/token)      
-      echo "$ARTIFACTORY_TOKEN" | podman login -u "$ARTIFACTORY_USER" --password-stdin "$ARTIFACTORY_URL"
-      podman push "$FINAL_IMAGE"
   rules:
-    # Run the deploy job manually if it's the default branch and specific files change
-    #- if: '$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH'
-    - if:  '$CI_COMMIT_REF_NAME == "FT-develop"'
-    #- if:  '$CI_COMMIT_REF_NAME == "testing-branch-strategy"'
+    - if: '$CI_COMMIT_REF_NAME == "FT-develop"'
       changes:
-        - "${DIR_STRUCTURE}/manifest"
-        - "${DIR_STRUCTURE}/Dockerfile"
+        - "${DIR_STRUCTURE}/*"
       when: manual
-
-    # Never trigger the deploy job for other branches
     - when: never
-

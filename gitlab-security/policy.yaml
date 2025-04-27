@@ -8,6 +8,8 @@ rules:
     severity_levels:
       - critical
       - high
+    branches:
+      - "main"  # Specify the branches that this policy should apply to
     match_on_inclusion: true
 actions:
   - type: block_merge_request

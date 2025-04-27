@@ -1,19 +1,16 @@
-type: scan_result_policy
+type: vulnerability_management_policy
 name: "Block MR if vulnerabilities found"
 enabled: true
 approval_settings:
-  auto_approve: false  # Ensures manual approval if a vulnerability is found
+  auto_approve: false   # Do not automatically approve MRs with vulnerabilities
 rules:
-  - type: scan_finding   # Correct type for scan-based policies
-    branch_type: target  # The policy applies to the target branch (e.g., main)
+  - type: scan_finding
     scanners:
       - sast
       - dependency_scanning
     severity_levels:
       - critical
       - high
-    branches:
-      - main
-      - develop
     actions:
-      - type: block_merge_request  # Action to block MR if vulnerability is found
+      - type: block_merge_request   # Block MRs if critical or high vulnerabilities are found
+      - type: notify_security_team   # Optional: Notify the security team

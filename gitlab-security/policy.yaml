@@ -1,10 +1,10 @@
 type: vulnerability_management_policy
-name: "Block MR if critical or high vulnerabilities found"
+name: "Block MR if vulnerabilities found"
 enabled: true
 approval_settings:
-  auto_approve: false   # Prevent auto-approval of MRs with vulnerabilities
+  auto_approve: false  # Disables auto-approval for MRs with vulnerabilities
 rules:
-  - type: no_longer_detected  # Change to valid rule type
+  - type: scan_finding
     scanners:
       - sast
       - dependency_scanning
@@ -12,4 +12,4 @@ rules:
       - critical
       - high
     actions:
-      - type: block_merge_request  # Block MR when critical or high vulnerabilities are found
+      - type: block_merge_request   # Block the MR if vulnerabilities are found

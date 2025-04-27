@@ -1,18 +1,8 @@
-type: scan_execution_policy
-name: "Block MR for 10 days if vulnerabilities found"
+type: pipeline   # Specify the type as 'pipeline' for a pipeline execution policy
+name: "Block MR if vulnerabilities found"
 enabled: true
 rules:
-  - type: scan_finding    # This tells GitLab we're setting a rule for vulnerabilities found
-    cadence: all          # Runs the policy every time the scan runs
-    scanners:
-      - sast
-      - dependency_scanning
-    severity_levels:
-      - critical
-      - high
-    branches:
-      - main
-      - develop
+  - type: pipeline # The policy applies when a pipeline runs
+    cadence: all    # Apply on every pipeline run
     actions:
-      - type: block_merge_request
-        condition: "if vulnerability detected"
+      - type: block_merge_request  # Block merge requests if vulnerabilities are detected

@@ -1,0 +1,19 @@
+type: scan_result_policy
+name: "MR approval for critical vulnerabilities"
+description: "Require security team approval if a critical vulnerability is found"
+enabled: true
+rules:
+  - type: sast
+    branches:
+      - main
+    scanners:
+      - sast
+    vulnerabilities_allowed: 0
+    severity_levels:
+      - critical
+    approvals_required: 1
+actions:
+  - type: require_approval
+    approvals_required: 1
+    approvers:
+      - group: security-team-group-id

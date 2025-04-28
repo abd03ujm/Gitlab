@@ -1,15 +1,27 @@
-type: vulnerability_management_policy
-name: "Block MR if vulnerabilities found"
+type: scan_result_policy
+name: Block MRs with Vulnerabilities
+description: Block feature branch MRs if any vulnerabilities are found
 enabled: true
-approval_settings:
-  auto_approve: false  # Disables auto-approval for MRs with vulnerabilities
 rules:
   - type: scan_finding
+    branches:
+      - "feature/*"
     scanners:
       - sast
       - dependency_scanning
+      - secret_detection
+      # (Optional) you can add: dast, container_scanning
+    vulnerabilities_allowed: 0
     severity_levels:
-      - critical
+      - info
+      - unknown
+      - low
+      - medium
       - high
-    actions:
-      - type: block_merge_request   # Block the MR if vulnerabilities are found
+      - critical
+    vulnerability_states:
+      - new
+actions:
+  - type: require_approval
+    approvals_required: 1
+    approvers: []

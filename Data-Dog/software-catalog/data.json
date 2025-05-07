@@ -1,0 +1,25 @@
+{
+  "data": {
+    "attributes": {
+      "schema_version": "v2.2",
+      "service": "payment-service",
+      "team": "platform-team",
+      "contacts": [
+        {
+          "contact": "slack://#payments-alerts",
+          "name": "Slack channel",
+          "type": "slack"
+        }
+      ],
+      "tags": ["env:prod", "language:python"],
+      "links": [
+        {
+          "name": "Repository",
+          "type": "repo",
+          "url": "https://github.com/example/payment-service"
+        }
+      ]
+    },
+    "type": "service_definition"
+  }
+}

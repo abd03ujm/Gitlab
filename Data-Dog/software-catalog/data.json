@@ -1,25 +1,58 @@
 {
   "data": {
+    "type": "service_definition",
     "attributes": {
       "schema_version": "v2.2",
-      "service": "payment-service",
-      "team": "platform-team",
+      "service": "<service-name>",
+      "team": "<owning-team-name>",
       "contacts": [
         {
-          "contact": "slack://#payments-alerts",
-          "name": "Slack channel",
-          "type": "slack"
+          "name": "<Contact Name>",
+          "type": "<slack | email | pagerduty | other>",
+          "contact": "<contact-info>"
         }
       ],
-      "tags": ["env:prod", "language:python"],
+      "tags": [
+        "env:<dev|staging|prod>",
+        "language:<python|java|node|go|ruby|...>"
+      ],
       "links": [
         {
           "name": "Repository",
           "type": "repo",
-          "url": "https://github.com/example/payment-service"
+          "url": "https://github.com/<org>/<repo>"
+        },
+        {
+          "name": "Runbook",
+          "type": "runbook",
+          "url": "https://<runbook-url>"
+        },
+        {
+          "name": "Dashboard",
+          "type": "dashboard",
+          "url": "https://app.datadoghq.com/dashboard/<dashboard-id>"
         }
-      ]
-    },
-    "type": "service_definition"
+      ],
+      "integrations": {
+        "opsgenie": {
+          "region": "<us | eu>",
+          "service_url": "https://<opsgenie-service-url>"
+        },
+        "pagerduty": {
+          "service_url": "https://<pagerduty-service-url>"
+        }
+      },
+      "lifecycle": {
+        "creation": "2024-01-01",
+        "last_updated": "2024-05-07",
+        "end_of_life": "2026-01-01"
+      },
+      "extensions": {
+        "com.company.custom": {
+          "business_unit": "payments",
+          "priority": "high"
+        }
+      }
+    }
   }
 }

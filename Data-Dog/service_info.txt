@@ -1,0 +1,34 @@
+# metadata
+name=sc-testing
+description=sctesting
+displayName=sc-testing
+owner=platform-engineering
+
+#tags
+tag=servicetype:sc-servicetype
+
+#links
+link_name=docker_images
+link_type=repo
+link_provider=gitlab
+link_url=https://gitlab.hyattdev.com/hyatt/digital-product/docker-images
+
+# contacts
+contact_name=Javaid Abdul
+contact_type=email
+contact_email=javaid.abdul@hyatt.com
+
+#additionalOwners
+additional_owner_name=javaid
+additional_owner_type=developer
+
+#spec
+lifecycle=testcycle
+tier=low
+language=jvm
+
+#type
+type=custom
+dependsOn=service:docker
+componentOf=service:alpine-java
+pipeline_fingerprint=alpinejava

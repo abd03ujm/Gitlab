@@ -1,0 +1,24 @@
+stages:
+  - sc-datadog
+
+send_datadog_service:
+  stage: sc-datadog
+  image: curlimages/curl:latest
+  script:
+    - echo "Sending service definition to Datadog Service Catalog"
+    - |
+      curl -X POST "https://api.datadoghq.com/api/v2/catalog/entity" \
+        -H "Content-Type: application/json" \
+        -H "DD-API-KEY: $SC_DD_API_KEY" \
+        -H "DD-APPLICATION-KEY: $SC_DD_APP_KEY" \
+        -H "DD-ORIGIN: cicd" \
+        -H "DD-ORIGIN-DETAIL: curl" \
+        -d @datadog_service_payload.json
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+    - changes:
+        - datadog_service_payload.json
+      when: always  
+    
+

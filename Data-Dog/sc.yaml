@@ -1,5 +1,16 @@
 stages:
+  - generate-json
   - sc-datadog
+
+generate_json:
+  stage: generate-json
+  image: python:3.11
+  script:
+    - python3 sc.py >  service_info.json
+  artifacts:
+    paths:
+      - service_info.json
+    expire_in: 1 hour
 
 send_datadog_service:
   stage: sc-datadog
@@ -13,12 +24,11 @@ send_datadog_service:
         -H "DD-APPLICATION-KEY: $SC_DD_APP_KEY" \
         -H "DD-ORIGIN: cicd" \
         -H "DD-ORIGIN-DETAIL: curl" \
-        -d @datadog_service_payload.json
+        -d @service_info.json \
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: always
     - changes:
-        - datadog_service_payload.json
+        - service_info.txt
       when: always  
     
-

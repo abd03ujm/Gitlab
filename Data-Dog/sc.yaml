@@ -29,6 +29,6 @@ send_datadog_service:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: always
     - changes:
-        - service_info.txt
+        - CI_PROJECT_NAME/service_info.txt
       when: always  
     

@@ -1,0 +1,56 @@
+{
+    "apiVersion": "v3",
+    "kind": "service",
+    "metadata": {
+      "name": "sc-testing",
+      "description": "sctesting",
+      "displayName": "sc-testing",
+      
+      "tags": [
+        "servicetype:sc-servicetype"
+      ],
+      "owner": "platform-engineering",
+      "links": [
+        {
+          "name": "docker_images",
+          "type": "repo",
+          "provider": "gitlab",
+          "url": "https://gitlab.hyattdev.com/hyatt/digital-product/docker-images"
+        }
+      ],
+      "contacts": [
+        {
+          "name": "Javaid Abdul",
+          "type": "email",
+          "contact": "javaid.abdul@hyatt.com"
+        }
+      ],
+      "additionalOwners": [
+        {
+          "name": "javaid",
+          "type": "developer"
+        }
+      ]
+    },
+    "datadog": {
+      "pipelines": {
+        "fingerprints": [
+          "alpinejava"
+        ]
+      }
+    },
+    "spec": {
+      "lifecycle": "testcycle",
+      "tier": "low",
+      "languages": [
+        "jvm"
+      ],
+      "type": "custom",
+      "dependsOn": [
+        "service:docker"
+      ],
+      "componentOf": [
+        "service:alpine-java"
+      ]
+    }
+  }

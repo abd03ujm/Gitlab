@@ -1,0 +1,36 @@
+# --- Metadata ---
+name=my-service-name
+displayName=My Display Name
+description=This service handles the core business logic for the checkout process.
+owner=team-devops
+tag=["servicetype:webapp", "env:production", "team:devops"]
+
+# --- Links (as lists) ---
+link_name=["source_code", "docs", "monitoring"]
+link_type=["repo", "docs", "dashboard"]
+link_provider=["github", "confluence", "datadog"]
+link_url=[
+  "https://github.com/myorg/my-service",
+  "https://confluence.myorg.com/pages/my-service-docs",
+  "https://app.datadoghq.com/dashboard/abc-123"
+]
+
+# --- Contacts ---
+contact_name=["Jane Doe", "John Admin"]
+contact_type=["email", "slack"]
+contact_email=["jane.doe@example.com", "admin-channel@slack.com"]
+
+# --- Additional Owners ---
+additional_owner_name=["John Smith","Jay"]
+additional_owner_type=["developer","Devops"]
+
+# --- Spec ---
+lifecycle=production
+tier=high
+language=["python", "bash"]
+type=service
+dependsOn=["service:auth-api", "service:payment-gateway"]
+componentOf=["service:checkout"]
+
+# --- Pipelines ---
+pipeline_fingerprint=["abc123def456", "xyz789ghi000"]

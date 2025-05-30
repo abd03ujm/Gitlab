@@ -1,15 +1,20 @@
 import json
-import ast  # for safely parsing list values from strings
+import ast
 
 def parse_value(value):
+    value = value.strip()
     try:
-        return ast.literal_eval(value)  # safely convert string lists to real lists
-    except:
-        return value.strip()
+        # Try to parse as a list
+        if value.startswith("[") and value.endswith("]"):
+            return ast.literal_eval(value)
+        else:
+            return value
+    except Exception:
+        return value
 
 # Read config file
 data = {}
-with open("service_info_1.txt", "r") as file:
+with open("dd-sc_info.ini", "r") as file:
     for line in file:
         if "=" in line:
             key, value = line.strip().split("=", 1)

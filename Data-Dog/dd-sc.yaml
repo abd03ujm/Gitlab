@@ -1,0 +1,56 @@
+apiVersion: v3
+kind: service
+
+metadata:
+  name: my-service-name
+  displayName: My Display Name
+  description: This service handles the core business logic for the checkout process.
+  owner: team-devops
+  tags:
+    - servicetype:webapp
+    - env:production
+    - team:devops
+  links:
+    - name: source_code
+      type: repo
+      provider: github
+      url: https://github.com/myorg/my-service
+    - name: docs
+      type: docs
+      provider: confluence
+      url: https://confluence.myorg.com/pages/my-service-docs
+    - name: monitoring
+      type: dashboard
+      provider: datadog
+      url: https://app.datadoghq.com/dashboard/abc-123
+  contacts:
+    - name: Jane Doe
+      type: email
+      contact: jane.doe@example.com
+    - name: John Admin
+      type: slack
+      contact: admin-channel@slack.com
+  additionalOwners:
+    - name: John Smith
+      type: developer
+    - name: Jay
+      type: Devops
+
+datadog:
+  pipelines:
+    fingerprints:
+      - abc123def456
+      - xyz789ghi000
+
+spec:
+  lifecycle: production
+  tier: high
+  languages:
+    - python
+    - bash
+  type: service
+  dependsOn:
+    - service:auth-api
+    - service:payment-gateway
+  componentOf:
+    - service:checkout

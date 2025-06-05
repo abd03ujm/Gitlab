@@ -1,15 +1,14 @@
 apiVersion: v3
 kind: service
-
 metadata:
   name: my-service-name
-  displayName: My Display Name
   description: This service handles the core business logic for the checkout process.
-  owner: team-devops
+  displayName: My Display Name
   tags:
     - servicetype:webapp
     - env:production
     - team:devops
+  owner: team-devops
   links:
     - name: source_code
       type: repo
@@ -48,6 +47,7 @@ spec:
   languages:
     - python
     - bash
+    - javascript
   type: service
   dependsOn:
     - service:auth-api

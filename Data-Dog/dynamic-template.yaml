@@ -1,0 +1,55 @@
+apiVersion: v3
+kind: service
+metadata:
+  service_name: jay-test-svc
+  service_description: This service handles business logic for the checkout process.
+  service_displayName: my-service-name
+  tags:
+    - servicetype:webapp
+    - team:devops
+  owner: team-devops
+  links:
+    - link_name: source_code
+      link_type: repo
+      link_provider: github
+      link_url: https://github.com/myorg/my-service
+    - link_name: docs
+      link_type: doc
+      link_provider: confluence
+      link_url: https://confluence.myorg.com/pages/my-service-docs
+    - link_name: monitoring
+      link_type: dashboard
+      link_provider: datadog
+      link_url: https://app.datadoghq.com/dashboard/abc-123
+  contacts:
+    - name: Mike 
+      type: email
+      contact: mark.meeker@hyatt.com
+    - name: Heather Riddle
+      type: slack
+      contact: https://your-slack-workspace.slack.com/app_redirect?channel=channel-id
+  additionalOwners:
+    - name: Mike Craig
+      type: Manager
+    - name: Bob Stevenson
+      type: Devops
+
+datadog:
+  pipelines:
+    fingerprints:
+      - abc123def456
+      - xyz789ghi000
+
+spec:
+  lifecycle: production
+  tier: high
+  languages:
+    - python
+    - bash
+    - javascript
+  type: web
+  dependsOn:
+    - service:auth-api
+    - service:payment-gateway
+  componentOf:
+    - service:checkout

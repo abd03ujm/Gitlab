@@ -24,15 +24,51 @@ except Exception as e:
     print(f"{wrong_symbol} Failed to load YAML: {e}")
     sys.exit(1)
 
-#---------- Change metadata keys names----------
+#---------- Replace key names----------
 metadata = data.get("metadata", {})
 
 field_renames = {
     "service_name": "name",
     "service_description": "description",
-    "service_displayName": "displayName"
+    "service_displayName": "displayName",
+    "service_tags": "tags",
+    "service_owner": "owners",
 }
 
+link_field_renames = {
+    "service_link_name": "name",
+    "service_link_type": "type",
+    "service_link_provider": "provider",
+    "service_link_url": "url"
+}
+
+contact_field_renames = {
+    "service_contact_name": "name",
+    "service_contact_type": "type",
+    "service_contact_contact": "contact"
+}
+additional_owners_field_renames = {
+    "service_additionalOwner_name": "name",
+    "service_additionalOwner_type": "type",
+}
+datadog_fields_renames = {
+    "service_pipelines": "pipelines",
+}
+datadog_fields_renames_fingerprint = {
+    "service_fingerprints": "fingerprints"
+}
+
+spec_renames = {
+    "service_lifecycle": "lifecycle",
+    "service_tier": "tier",
+    "service_languages": "languages",
+    "service_type": "type",
+    "service_dependsOn": "dependsOn",
+    "service_componentOf": "componentOf"
+   
+}
+
+#######################################################
 for old_key, new_key in field_renames.items():
     if old_key in metadata:
         metadata[new_key] = metadata.pop(old_key)
@@ -42,12 +78,7 @@ print(f"{correct_symbol} Renamed metadata fields: {', '.join(field_renames.value
 
 
 #---------- Change links keys names----------
-link_field_renames = {
-    "link_name": "name",
-    "link_type": "type",
-    "link_provider": "provider",
-    "link_url": "url"
-}
+
 
 metadata_links = metadata.get("links", [])
 if isinstance(metadata_links, list):
@@ -67,8 +98,85 @@ if isinstance(root_links, list):
 # Save updated metadata
 data["metadata"] = metadata
 
+#------ Contact fields renaming----------
+
+metadata_contacts = metadata.get("contacts", [])
+if isinstance(metadata_contacts, list):
+    for contact in metadata_contacts:
+        for old_key, new_key in contact_field_renames.items():
+            if old_key in contact:
+                contact[new_key] = contact.pop(old_key)
+#------------ Rename root-level contacts ----------
+root_contacts = data.get("contacts", [])
+if isinstance(root_contacts, list):
+    for contact in root_contacts:
+        for old_key, new_key in contact_field_renames.items():
+            if old_key in contact:
+                contact[new_key] = contact.pop(old_key)
+# Save updated metadata contacts
+data["metadata"] = metadata
+
+#---- addtional owners renaming----------
+
+additional_owners = metadata.get("additionalOwners", [])
+if isinstance(additional_owners, list):
+    for owner in additional_owners:
+        for old_key, new_key in additional_owners_field_renames.items():
+            if old_key in owner:
+                owner[new_key] = owner.pop(old_key)
+#------------ Rename root-level additional owners ----------
+root_additional_owners = data.get("additionalOwners", [])
+if isinstance(root_additional_owners, list):
+    for owner in root_additional_owners:
+        for old_key, new_key in additional_owners_field_renames.items():
+            if old_key in owner:
+                owner[new_key] = owner.pop(old_key)
+# Save updated additional owners
+data["metadata"] = metadata
+
+#------------ Validate datadog  ----------
+
+datadog = data.get("datadog", {})
+for old_key, new_key in datadog_fields_renames.items():
+    if old_key in datadog:
+        datadog[new_key] = datadog.pop(old_key)
+
+#-- root-level datadog fields renaming ----------
+root_datadog = data.get("datadog", {})
+for old_key, new_key in datadog_fields_renames.items():
+    if old_key in root_datadog:
+        root_datadog[new_key] = root_datadog.pop(old_key)
+# Save updated datadog
+data["datadog"] = datadog
+
+#---------- Rename fingerprint field ----------
+
+pipelines = data.get("datagog", {}).get("pipelines", [])
+for old_key, new_key in datadog_fields_renames_fingerprint.items():
+    if old_key in datadog:
+        pipelines[new_key] = pipelines.pop(old_key)
+data["datadog"] = datadog
 
 
+#-- rot-level fingerprint renaming ----------
+root_pipelines = data.get("datadog", {}).get("pipelines", [])
+for old_key, new_key in datadog_fields_renames_fingerprint.items():
+    if old_key in root_pipelines:
+        root_pipelines[new_key] = root_pipelines.pop(old_key)
+
+#- spec renaming ----------
+spec = data.get("spec", {})
+
+for old_key, new_key in spec_renames.items():
+    if old_key in spec:
+        spec[new_key] = spec.pop(old_key)
+## root-level spec renaming
+root_spec = data.get("spec", {})
+for old_key, new_key in spec_renames.items():
+    if old_key in root_spec:
+        root_spec[new_key] = root_spec.pop(old_key)
+data["spec"] = spec
+#####################################################################################################
 # ---------- Validate Contacts ----------
 contacts = data.get("metadata", {}).get("contacts", [])
 

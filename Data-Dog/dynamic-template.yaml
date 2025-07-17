@@ -4,52 +4,52 @@ metadata:
   service_name: jay-test-svc
   service_description: This service handles business logic for the checkout process.
   service_displayName: my-service-name
-  tags:
+  service_tags:
     - servicetype:webapp
     - team:devops
-  owner: team-devops
+  service_owner: team-devops
   links:
-    - link_name: source_code
-      link_type: repo
-      link_provider: github
-      link_url: https://github.com/myorg/my-service
-    - link_name: docs
-      link_type: doc
-      link_provider: confluence
-      link_url: https://confluence.myorg.com/pages/my-service-docs
-    - link_name: monitoring
-      link_type: dashboard
-      link_provider: datadog
-      link_url: https://app.datadoghq.com/dashboard/abc-123
+    - service_link_name: source_code
+      service_link_type: repo
+      service_link_provider: github
+      service_link_url: https://github.com/myorg/my-service
+    - service_link_name: docs
+      service_link_type: doc
+      service_link_provider: confluence
+      service_link_url: https://confluence.myorg.com/pages/my-service-docs
+    - service_link_name: monitoring
+      service_link_type: dashboard
+      service_link_provider: datadog
+      service_link_url: https://app.datadoghq.com/dashboard/abc-123
   contacts:
-    - name: Mike 
-      type: email
-      contact: mark.meeker@hyatt.com
-    - name: Heather Riddle
-      type: slack
-      contact: https://your-slack-workspace.slack.com/app_redirect?channel=channel-id
+    - service_contact_name: Mike 
+      service_contact_type: email
+      service_contact_contact: mark.meeker@hyatt.com
+    - service_contact_name: Heather Riddle
+      service_contact_type: slack
+      service_contact_contact: https://your-slack-workspace.slack.com/app_redirect?channel=channel-id
   additionalOwners:
-    - name: Mike Craig
-      type: Manager
-    - name: Bob Stevenson
-      type: Devops
+    - service_additionalOwner_name: Mike Craig
+      service_additionalOwner_type: Manager
+    - service_additionalOwner_name: Bob Stevenson
+      service_additionalOwner_type: Devops
 
 datadog:
-  pipelines:
-    fingerprints:
+  service_pipelines:
+    service_fingerprints:
       - abc123def456
       - xyz789ghi000
 
 spec:
-  lifecycle: production
-  tier: high
-  languages:
+  service_lifecycle: production
+  service_tier: high
+  service_languages:
     - python
     - bash
     - javascript
-  type: web
-  dependsOn:
+  service_type: web
+  service_dependsOn:
     - service:auth-api
     - service:payment-gateway
-  componentOf:
+  service_componentOf:
     - service:checkout
